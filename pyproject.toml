@@ -1,0 +1,44 @@
+[project]
+name = "open-docs-drafter"
+version = "0.0.1"
+description = "Drafts documentation updates for open-source AID projects from merged code changes. Draft PRs only, every claim cited, humans approve."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+authors = [{ name = "Kamil Armacky" }]
+keywords = ["documentation", "diabetes", "open-source-aid", "trio", "mkdocs"]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Documentation",
+]
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/kamilonboard/open-docs-drafter"
+
+[project.scripts]
+open-docs-drafter = "open_docs_drafter.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11"]
+
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.mypy]
+strict = true
+packages = ["open_docs_drafter"]
+mypy_path = "src"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
