@@ -27,3 +27,6 @@ node_modules/
 # Tool run output
 runs/
 audit-logs/
+
+# Backtest cache
+.cache/

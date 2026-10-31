@@ -15,15 +15,36 @@ uv run open-docs-drafter triage --profile profiles/trio/profile.yaml \
     --text "Rename the save button"
 ```
 
-## First check against real pull requests (2026-10-31)
+## Backtest
 
-Rule-based triage only, run over Trio's 40 most recently merged pull requests (#1619–#1711),
-using changed files, title, body and added/removed diff lines.
+Check the rules against real merged pull requests. The first run downloads them into
+`.cache/backtest/`; later runs can use `--offline`.
+
+```sh
+uv run open-docs-drafter backtest --profile profiles/trio/profile.yaml --limit 40
+```
+
+Before changing a rule, keep a copy of the old profile and compare. Any pull request whose
+tier goes down is marked `LOWERED, check by hand`:
+
+```sh
+cp profiles/trio/profile.yaml /tmp/trio-before.yaml
+# ...edit profile.yaml...
+uv run open-docs-drafter backtest --profile profiles/trio/profile.yaml \
+    --baseline /tmp/trio-before.yaml --offline
+```
+
+Add `--format markdown` for a table to paste into an issue, or `--format json` for scripts.
+
+### Latest result (2026-10-31)
+
+The 40 most recently merged Trio pull requests (merged 2026-10-18 to 2026-10-31), rule-based
+triage only, using changed files, title, body and added or removed diff lines:
 
 | Tier  | PRs |
 |-------|----:|
-| Red   | 23  |
-| Amber | 17  |
+| Red   | 27  |
+| Amber | 13  |
 | Green | 0   |
 
 Every algorithm, dosing and alarm change came out red (for example #1651, #1679, #1645,
