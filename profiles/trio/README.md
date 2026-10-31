@@ -53,7 +53,26 @@ Adjustments screens (#1684, #1685), dead-code removals that mention `basal` (#17
 and a sound-licence note that mentions `alarm` (#1658). No PR reached green, mostly because
 almost every PR touches at least one file no rule covers, which defaults to amber.
 
+## Facts (layer 3)
+
+Exact, cited facts about every setting: default, JSON key, JSON default, picker range, step,
+unit, on-screen label and the "Default: ..." help text.
+
+```sh
+uv run open-docs-drafter facts --profile profiles/trio/profile.yaml --ref main
+uv run open-docs-drafter facts --profile profiles/trio/profile.yaml --setting maxBasal
+uv run open-docs-drafter facts --profile profiles/trio/profile.yaml --base v0.8.4 --ref v1.0
+```
+
+On `main` (2026-10-31): 499 facts for 94 settings, 2 that need a human (a default that is a
+calculation, and help text that depends on the user's glucose unit), and 1 inconsistency:
+
+- **`maxBasal`**: `settings.json` and the help text say 2 U/hr, but `DecimalPickerSettings`
+  sets the picker's `value` to 10. It was already like this in v1.0.
+
 ## Questions for Trio maintainers
+
+- Is `maxBasal`'s picker `value: 10` used anywhere, or can the docs rely on 2 U/hr?
 
 - Should UI-only changes to therapy and adjustment screens stay red, or become amber?
 - Should the bolus and carb entry screens (Treatments, AddCarbs) be red or amber?

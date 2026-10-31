@@ -1,0 +1,146 @@
+# Layer 3 cases: whole files ("snapshots") under their Trio paths, with errors planted in
+# them. The extractor must flag each one instead of passing a value on to the docs.
+
+- id: pe-h1-help-text-contradicts-default
+  hazard: H1
+  summary: >-
+    A PR changes the SMB interval default to 3 but leaves the help text saying 5. The docs
+    can't copy either one until a human decides.
+  snapshot:
+    Trio/Sources/Models/Preferences.swift: |
+      struct Preferences: JSON, Equatable {
+          var smbInterval: Decimal = 3
+      }
+    Trio/Sources/Modules/SMBSettings/View/SMBSettingsRootView.swift: |
+      SettingInputSection(
+          decimalValue: $state.smbInterval,
+          booleanValue: $booleanPlaceholder,
+          type: .decimal("smbInterval"),
+          label: String(localized: "SMB Delivery Interval"),
+          verboseHint: VStack { Text("Default: 5 min").bold() }
+      )
+  expect:
+    facts:
+      inconsistent: [smbInterval]
+      values: {smbInterval.default: 3, smbInterval.hint_default: "Default: 5 min"}
+
+- id: pe-h1-percent-factor-is-not-a-false-alarm
+  hazard: H1
+  summary: >-
+    Factors are shown as percentages (3 is shown as 300%). This must not be flagged, or real
+    flags get ignored.
+  snapshot:
+    Trio/Sources/Models/Preferences.swift: |
+      struct Preferences: JSON, Equatable {
+          var maxDailySafetyMultiplier: Decimal = 3
+      }
+    Trio/Sources/Modules/GeneralSettings/View/UnitsLimitsSettingsRootView.swift: |
+      SettingInputSection(
+          decimalValue: $state.maxDailySafetyMultiplier,
+          booleanValue: $booleanPlaceholder,
+          type: .decimal("maxDailySafetyMultiplier"),
+          label: String(localized: "Max Daily Safety Multiplier"),
+          verboseHint: VStack { Text("Default: 300%").bold() }
+      )
+  expect:
+    facts:
+      consistent: [maxDailySafetyMultiplier]
+
+- id: pe-h1-default-is-a-calculation
+  hazard: H1
+  summary: A default computed from another value can't be read exactly. It needs a human.
+  snapshot:
+    Trio/Sources/Models/Preferences.swift: |
+      struct Preferences: JSON, Equatable {
+          var maxIOB: Decimal = 0
+          var smbCap: Decimal = maxIOB * 0.5
+      }
+  expect:
+    facts:
+      needs_human: [smbCap]
+      values: {maxIOB.default: 0}
+
+- id: pe-h1-help-text-depends-on-units
+  hazard: H1
+  summary: >-
+    Help text that changes with the user's glucose unit (mg/dL or mmol/L) can't be read as
+    one value. It needs a human, so the docs don't print the wrong unit.
+  snapshot:
+    Trio/Sources/Modules/GeneralSettings/View/TargetBehaviorView.swift: |
+      SettingInputSection(
+          decimalValue: $state.halfBasalExerciseTarget,
+          booleanValue: $booleanPlaceholder,
+          type: .decimal("halfBasalExerciseTarget"),
+          label: String(localized: "Half Basal Exercise Target"),
+          verboseHint: VStack {
+              Text(
+                  "Default: \(state.units == .mgdL ? "160" : 160.formattedAsMmolL) \(state.units.rawValue)"
+              )
+          }
+      )
+  expect:
+    facts:
+      needs_human: [halfBasalExerciseTarget]
+
+- id: pe-h3-json-default-disagrees-with-code
+  hazard: H3
+  summary: >-
+    A PR changes the default in the bundled JSON but not in the Swift model, so new and
+    existing installs would start with different values.
+  snapshot:
+    Trio/Sources/Models/Preferences.swift: |
+      struct Preferences: JSON, Equatable {
+          var maxIOB: Decimal = 0
+      }
+      extension Preferences {
+          private enum CodingKeys: String, CodingKey {
+              case maxIOB = "max_iob"
+          }
+      }
+    Trio/Resources/json/defaults/preferences.json: |
+      {
+        "max_iob" : 2
+      }
+  expect:
+    facts:
+      inconsistent: [maxIOB]
+      values: {maxIOB.default: 0, maxIOB.json_default: 2, maxIOB.json_key: max_iob}
+
+- id: pe-h1-range-change-is-detected
+  hazard: H1
+  summary: >-
+    A PR raises the maximum of Max SMB Basal Minutes from 180 to 240. The change must come
+    out as an exact before-and-after fact, so the docs get the new number from the code.
+  base_snapshot:
+    Trio/Sources/Models/DecimalPickerSettings.swift: |
+      struct DecimalPickerSettings {
+          var maxSMBBasalMinutes = PickerSetting(value: 30, step: 5, min: 15, max: 180, type: PickerSetting.PickerSettingType.minute)
+      }
+  snapshot:
+    Trio/Sources/Models/DecimalPickerSettings.swift: |
+      struct DecimalPickerSettings {
+          var maxSMBBasalMinutes = PickerSetting(value: 30, step: 5, min: 15, max: 240, type: PickerSetting.PickerSettingType.minute)
+      }
+  expect:
+    facts:
+      values: {maxSMBBasalMinutes.max: 240, maxSMBBasalMinutes.unit: min}
+      changes:
+        - {setting: maxSMBBasalMinutes, kind: max, old: 180, new: 240}
+
+- id: pe-h1-unit-change-is-detected
+  hazard: H1
+  summary: A picker's unit changes from minutes to hours. The unit change must be reported.
+  base_snapshot:
+    Trio/Sources/Models/DecimalPickerSettings.swift: |
+      struct DecimalPickerSettings {
+          var maxMealAbsorptionTime = PickerSetting(value: 6, step: 1, min: 4, max: 10, type: PickerSetting.PickerSettingType.minute)
+      }
+  snapshot:
+    Trio/Sources/Models/DecimalPickerSettings.swift: |
+      struct DecimalPickerSettings {
+          var maxMealAbsorptionTime = PickerSetting(value: 6, step: 1, min: 4, max: 10, type: PickerSetting.PickerSettingType.hour)
+      }
+  expect:
+    facts:
+      changes:
+        - {setting: maxMealAbsorptionTime, kind: unit, old: min, new: h}

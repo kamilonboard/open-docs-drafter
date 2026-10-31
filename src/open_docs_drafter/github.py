@@ -3,6 +3,7 @@
 Uses only the standard library. It never writes to GitHub.
 """
 
+import base64
 import json
 import os
 import shutil
@@ -77,6 +78,20 @@ class GitHubClient:
                 break
         merged.sort(key=lambda p: p["merged_at"], reverse=True)
         return merged[:limit]
+
+    def tree(self, repo: str, ref: str) -> list[str]:
+        """Every file path in the repository at ref."""
+        data = self._get(f"/repos/{repo}/git/trees/{urllib.parse.quote(ref)}", {"recursive": 1})
+        if data.get("truncated"):
+            raise GitHubError(f"File list for {repo}@{ref} is too large for one request")
+        return [item["path"] for item in data["tree"] if item["type"] == "blob"]
+
+    def file(self, repo: str, path: str, ref: str) -> str:
+        """A file's text at ref."""
+        data = self._get(f"/repos/{repo}/contents/{urllib.parse.quote(path)}", {"ref": ref})
+        if data.get("encoding") != "base64":
+            raise GitHubError(f"{path}@{ref}: unexpected encoding {data.get('encoding')!r}")
+        return base64.b64decode(data["content"]).decode("utf-8")
 
     def pull_files(self, repo: str, number: int) -> tuple[ChangedFile, ...]:
         files: list[ChangedFile] = []

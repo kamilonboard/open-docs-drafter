@@ -1,10 +1,12 @@
 """Command-line entry point."""
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 from open_docs_drafter import __version__, backtest
+from open_docs_drafter.facts import Fact, inconsistencies
 from open_docs_drafter.github import (
     GitHubClient,
     GitHubError,
@@ -12,6 +14,7 @@ from open_docs_drafter.github import (
     fetch_merged,
     find_token,
 )
+from open_docs_drafter.layers import fact_extraction
 from open_docs_drafter.layers.triage import rule_based_tier
 from open_docs_drafter.profile import Profile, ProfileError, load_profile
 
@@ -46,6 +49,16 @@ def main(argv: list[str] | None = None) -> int:
     bt.add_argument("--offline", action="store_true", help="use cached PRs only")
     bt.add_argument("--format", choices=["text", "markdown", "json"], default="text")
 
+    fx = sub.add_parser(
+        "facts", help="Extract exact, cited setting facts from the code at a git ref."
+    )
+    fx.add_argument("--profile", required=True)
+    fx.add_argument("--repo", help="owner/name; defaults to the profile's code_repo")
+    fx.add_argument("--ref", default="main", help="branch, tag or commit (default main)")
+    fx.add_argument("--base", metavar="REF", help="show what changed from this ref to --ref")
+    fx.add_argument("--setting", action="append", default=[], help="only these settings")
+    fx.add_argument("--format", choices=["text", "json"], default="text")
+
     args = parser.parse_args(argv)
 
     if args.command is None:
@@ -68,6 +81,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "backtest":
         return _backtest(args, profile)
+
+    if args.command == "facts":
+        return _facts(args, profile)
 
     result = rule_based_tier(profile, args.files, args.texts)
     print(f"Tier: {result.tier.name}")
@@ -113,6 +129,94 @@ def _backtest(args: argparse.Namespace, profile: Profile) -> int:
     }[args.format]
     print(formatter(results, changes))
     return 0
+
+
+def _facts(args: argparse.Namespace, profile: Profile) -> int:
+    if not profile.facts:
+        print("error: this profile has no `facts` section", file=sys.stderr)
+        return 1
+    repo = args.repo or profile.project.code_repo
+    client = GitHubClient(find_token())
+
+    def snapshot(ref: str) -> dict[str, str]:
+        paths = fact_extraction.fact_paths(profile, client.tree(repo, ref))
+        return {p: client.file(repo, p, ref) for p in paths}
+
+    try:
+        head = snapshot(args.ref)
+        base = snapshot(args.base) if args.base else None
+    except GitHubError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    wanted = set(args.setting)
+    head_facts = fact_extraction.extract_facts(profile, head)
+    shown = [f for f in head_facts.facts if not wanted or f.setting in wanted]
+    problems = [i for i in inconsistencies(head_facts) if not wanted or i.setting in wanted]
+    changes = None
+    if base is not None:
+        changes = [
+            c
+            for c in fact_extraction.fact_changes(profile, base, head)
+            if not wanted or c.setting in wanted
+        ]
+
+    if args.format == "json":
+        data: dict[str, object] = {
+            "repo": repo,
+            "ref": args.ref,
+            "facts": [_fact_json(f) for f in shown],
+            "inconsistencies": [{"setting": i.setting, "message": i.message} for i in problems],
+        }
+        if changes is not None:
+            data["base"] = args.base
+            data["changes"] = [
+                {
+                    "setting": c.setting,
+                    "kind": c.kind.value,
+                    "old": _fact_json(c.old) if c.old else None,
+                    "new": _fact_json(c.new) if c.new else None,
+                }
+                for c in changes
+            ]
+        print(json.dumps(data, indent=2))
+        return 0
+
+    by_setting: dict[str, list[Fact]] = {}
+    for f in shown:
+        by_setting.setdefault(f.setting, []).append(f)
+    for setting in sorted(by_setting):
+        print(setting)
+        for f in by_setting[setting]:
+            value = f.value if f.value is not None else f"NEEDS HUMAN ({f.needs_human})"
+            unit = f" {f.unit}" if f.unit and f.kind.value in ("min", "max", "step") else ""
+            print(f"  {f.kind.value:<15} {value}{unit}  [{f.citation}]")
+    needing = [f for f in shown if f.value is None]
+    print(
+        f"\n{len(shown)} facts for {len(by_setting)} settings at {repo}@{args.ref}; "
+        f"{len(needing)} need a human; {len(problems)} inconsistencies"
+    )
+    for i in problems:
+        print(f"  INCONSISTENT {i.setting}: {i.message}")
+    if changes is not None:
+        print(f"\n{len(changes)} fact changes from {args.base} to {args.ref}:")
+        for c in changes:
+            where = c.new.citation if c.new else (c.old.citation if c.old else "")
+            print(f"  {c.summary}  [{where}]")
+    return 0
+
+
+def _fact_json(f: Fact) -> dict[str, object]:
+    return {
+        "setting": f.setting,
+        "kind": f.kind.value,
+        "value": f.value,
+        "unit": f.unit,
+        "path": f.path,
+        "line": f.line,
+        "source": f.source,
+        "needs_human": f.needs_human,
+    }
 
 
 if __name__ == "__main__":

@@ -16,7 +16,8 @@ from open_docs_drafter.tiers import Tier
 SUPPORTED_PROFILE_VERSIONS = {1}
 DOCS_FORMATS = {"mkdocs"}
 
-_TOP_KEYS = {"profile_version", "project", "status", "default_tier", "rules"}
+_TOP_KEYS = {"profile_version", "project", "status", "default_tier", "rules", "facts"}
+_FACT_SOURCE_KEYS = {"extractor", "paths"}
 _PROJECT_KEYS = {"name", "code_repo", "docs_repo", "docs_branch", "docs_format"}
 _RULE_KEYS = {"id", "tier", "reason", "paths", "keywords"}
 _STATUSES = {"draft", "confirmed"}
@@ -36,11 +37,20 @@ class Project:
 
 
 @dataclass(frozen=True)
+class FactSource:
+    """Which extractor reads which files (fnmatch patterns; `*` also matches `/`)."""
+
+    extractor: str
+    paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Profile:
     project: Project
     status: str
     default_tier: Tier
     rules: tuple[Rule, ...]
+    facts: tuple[FactSource, ...] = ()
 
     @property
     def all_rules(self) -> tuple[Rule, ...]:
@@ -92,7 +102,27 @@ def parse_profile(data: Any, *, source: str = "profile") -> Profile:
             raise ProfileError(f"{source}: rule id {rule.id!r} is duplicated or reuses a core id")
         seen.add(rule.id)
 
-    return Profile(project=project, status=status, default_tier=default_tier, rules=rules)
+    raw_facts = top.get("facts", [])
+    if not isinstance(raw_facts, list):
+        raise ProfileError(f"{source}: facts must be a list")
+    facts = tuple(_parse_fact_source(f, f"{source}: facts[{i}]") for i, f in enumerate(raw_facts))
+
+    return Profile(
+        project=project, status=status, default_tier=default_tier, rules=rules, facts=facts
+    )
+
+
+def _parse_fact_source(data: Any, where: str) -> FactSource:
+    from open_docs_drafter.extractors import EXTRACTORS
+
+    raw = _mapping(data, where, _FACT_SOURCE_KEYS)
+    extractor = _string(raw.get("extractor"), f"{where}.extractor")
+    if extractor not in EXTRACTORS:
+        raise ProfileError(f"{where}.extractor must be one of {sorted(EXTRACTORS)}")
+    paths = _string_list(raw.get("paths", []), f"{where}.paths")
+    if not paths:
+        raise ProfileError(f"{where}: needs at least one path")
+    return FactSource(extractor=extractor, paths=paths)
 
 
 def _parse_project(data: Any, where: str) -> Project:

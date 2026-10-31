@@ -1,6 +1,6 @@
 # open-docs-drafter
 
-**Status: early development.** Layer 1 (input check), rule-based triage and the planted-error suite are built. Nothing drafts docs yet.
+**Status: early development.** Layers 1 (input check) and 3 (fact extraction), rule-based triage and the planted-error suite are built. Nothing drafts docs yet.
 
 open-docs-drafter watches open-source automated insulin delivery (OS-AID) projects on GitHub and drafts documentation updates from merged code changes. It only opens **draft pull requests for human review**. It never merges anything.
 
@@ -51,7 +51,7 @@ These rules live in the core engine. A project profile can add rules but can nev
 ## Roadmap
 
 - [x] Trio profile file with tier rules (draft, needs maintainer review)
-- [ ] Deterministic layers (1, 3, 5, 7) with their own tests (layer 1 done)
+- [ ] Deterministic layers (1, 3, 5, 7) with their own tests (layers 1 and 3 done)
 - [x] Planted-error test suite, built before any drafting code ([tests/planted_errors](tests/planted_errors); 5 checks pending later layers)
 - [ ] Backtest on past Trio releases
 - [ ] Shadow mode, agreed with Trio maintainers

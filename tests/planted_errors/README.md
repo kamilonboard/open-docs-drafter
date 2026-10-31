@@ -45,7 +45,13 @@ uv run pytest tests/planted_errors -rs
 | `input_check.findings_include` | Layer 1 reports these finding codes |
 | `input_check.text_excludes` | These strings never reach later layers |
 | `input_check.diff_tier_min` | The diff's own tier, ignoring PR text, is at least this |
+| `facts.inconsistent` / `facts.consistent` | Layer 3 flags (or doesn't flag) these settings as disagreeing with themselves |
+| `facts.needs_human` | Layer 3 can't read these settings exactly and says why |
+| `facts.values` | `setting.kind: value` pairs Layer 3 must extract exactly |
+| `facts.changes` | Exact before-and-after facts between `base_snapshot` and `snapshot` |
 | `pending` | A check for a layer not built yet; shown as a skipped test |
+
+Fact cases use `snapshot` (whole files, path to text) instead of `pr`.
 
 Case files are validated strictly. A misspelt key is an error, never a silent pass.
 
@@ -72,3 +78,16 @@ Each safeguard was broken in turn in a copy of the code. The suite failed every 
 | Zero-width character removal | 1 |
 | Amber default for unknown files | 1 |
 | Misspelt expectation key | collection error |
+
+Layer 3 (fact extraction), checked the same way:
+
+| Safeguard removed | Cases failed |
+|---|---:|
+| Unit facts | 2 |
+| Detecting changed values | 2 |
+| Defaults-disagree check | 1 |
+| Help-text check | 1 |
+| Percent equivalence for factors | 1 |
+| Treating calculations as unreadable | 1 |
+| Flagging runtime-dependent help text | 1 |
+| Linking JSON keys to Swift names | 1 |

@@ -24,6 +24,22 @@ project:
 
 default_tier: amber
 
+# Layer 3: where exact facts about settings come from. Docs drafts may only take setting
+# names, defaults, ranges, units and labels from these facts, never from the model.
+facts:
+  - extractor: swift_struct_defaults # Model defaults, e.g. `var maxIOB: Decimal = 0`
+    paths: ["Trio/Sources/Models/Preferences.swift"]
+  - extractor: swift_coding_keys # Swift name -> JSON key, e.g. maxIOB -> max_iob
+    paths: ["Trio/Sources/Models/Preferences.swift"]
+  - extractor: json_defaults # Bundled defaults for preferences and pump settings
+    paths:
+      - "Trio/Resources/json/defaults/preferences.json"
+      - "Trio/Resources/json/defaults/settings/settings.json"
+  - extractor: trio_picker_settings # Picker default, min, max, step and unit
+    paths: ["Trio/Sources/Models/DecimalPickerSettings.swift"]
+  - extractor: trio_setting_views # On-screen labels and "Default: ..." help text
+    paths: ["Trio/Sources/Modules/*/View/*.swift"]
+
 rules:
   # ---------------------------------------------------------------- red
   # No AI-written text. A human expert writes the docs change from an evidence pack.

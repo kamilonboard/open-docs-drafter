@@ -1,0 +1,7 @@
+{
+  "max_iob" : 0,
+  "maxSMBBasalMinutes" : 30,
+  "enableSMB_always" : false,
+  "curve" : "rapid-acting",
+  "SMBInterval" : 3
+}
