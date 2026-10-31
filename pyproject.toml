@@ -13,7 +13,9 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Documentation",
 ]
-dependencies = []
+dependencies = [
+    "pyyaml>=6",
+]
 
 [project.urls]
 Repository = "https://github.com/kamilonboard/open-docs-drafter"
@@ -22,7 +24,12 @@ Repository = "https://github.com/kamilonboard/open-docs-drafter"
 open-docs-drafter = "open_docs_drafter.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "types-pyyaml>=6.0.12.20261030",
+]
 
 [build-system]
 requires = ["hatchling>=1.26"]

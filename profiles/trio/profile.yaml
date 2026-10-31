@@ -1,0 +1,205 @@
+# Trio profile for open-docs-drafter.
+#
+# status: draft means these rules are a first proposal, not yet agreed with Trio's
+# maintainers. Paths were checked against nightscout/Trio (main) on 2026-10-31.
+#
+# How matching works:
+#   - Each changed file gets the highest tier of the path rules it matches.
+#   - A file no rule matches gets default_tier (amber). A green rule can't hide it.
+#   - Keywords match word by word in the diff or PR text (camelCase is split, so `isf`
+#     matches `dynamicISF` but not `isFinished`), and raise the tier.
+#   - The core rules (dosing, safety limits, settings resets, alarms, pairing, sync) always
+#     apply on top of this file. Nothing here can switch them off.
+#   - In paths, `*` also matches `/`, so `trio-oref/*` covers everything under trio-oref.
+
+profile_version: 1
+status: draft
+
+project:
+  name: Trio
+  code_repo: nightscout/Trio
+  docs_repo: nightscout/trio-docs
+  docs_branch: dev
+  docs_format: mkdocs
+
+default_tier: amber
+
+rules:
+  # ---------------------------------------------------------------- red
+  # No AI-written text. A human expert writes the docs change from an evidence pack.
+
+  - id: trio-red-algorithm
+    tier: red
+    reason: Dosing algorithm (oref JavaScript, its Swift port, and the bundled Loop algorithm)
+    paths:
+      - "trio-oref/*"
+      - "AlgorithmPackage/*"
+      - "Trio/Sources/APS/OpenAPS/*"
+      - "Trio/Sources/APS/OpenAPSSwift/*"
+      - "LoopAlgorithm"
+      - "LoopAlgorithm/*"
+      - "scripts/webpack.config.js"
+
+  - id: trio-red-dosing-services
+    tier: red
+    reason: Bolus calculation, bolus safety, IOB and adjustments (overrides, temp targets)
+    paths:
+      - "Trio/Sources/Services/BolusCalculator/*"
+      - "Trio/Sources/Services/BolusSafety/*"
+      - "Trio/Sources/Services/IOB/*"
+      - "Trio/Sources/Services/Adjustments/*"
+
+  - id: trio-red-therapy-settings
+    tier: red
+    reason: Therapy and algorithm settings screens
+    paths:
+      - "Trio/Sources/Modules/ISFEditor/*"
+      - "Trio/Sources/Modules/CarbRatioEditor/*"
+      - "Trio/Sources/Modules/BasalProfileEditor/*"
+      - "Trio/Sources/Modules/TargetsEditor/*"
+      - "Trio/Sources/Modules/TargetBehavoir/*" # sic: the folder name in Trio
+      - "Trio/Sources/Modules/SMBSettings/*"
+      - "Trio/Sources/Modules/AutosensSettings/*"
+      - "Trio/Sources/Modules/DynamicSettings/*"
+      - "Trio/Sources/Modules/AlgorithmAdvancedSettings/*"
+      - "Trio/Sources/Modules/BolusCalculatorConfig/*"
+      - "Trio/Sources/Modules/MealSettings/*"
+      - "Trio/Sources/Modules/AutotuneConfig/*"
+      - "Trio/Sources/Modules/Adjustments/*"
+
+  - id: trio-red-treatment-entry
+    tier: red
+    reason: Screens where users enter boluses and carbs (to confirm with maintainers)
+    paths:
+      - "Trio/Sources/Modules/Treatments/*"
+      - "Trio/Sources/Modules/AddCarbs/*"
+
+  - id: trio-red-defaults-and-migrations
+    tier: red
+    reason: Default values, stored settings and data migrations (settings may reset)
+    paths:
+      - "Trio/Resources/json/defaults/*"
+      - "Trio/Sources/Services/SettingsManager/*"
+      - "Model/*.xcdatamodeld/*" # Core Data schema only; helpers under Model/ are not migrations
+      - "*Migration*"
+
+  - id: trio-red-alarms
+    tier: red
+    reason: Glucose alerts and device alarms
+    paths:
+      - "Trio/Sources/Services/Alerts/*"
+      - "Trio/Sources/Models/GlucoseAlerts/*"
+      - "Trio/Sources/Modules/GlucoseAlerts/*"
+      - "Trio/Sources/Modules/AlarmWindows/*"
+      - "Trio/Sources/Modules/DeviceAlarms/*"
+
+  - id: trio-red-keywords
+    tier: red
+    reason: Algorithm terms from the Trio design doc
+    keywords:
+      - "isf"
+      - "smb"
+      - "uam"
+      - "autosens"
+      - "dynamic isf"
+      - "basal"
+      - "oref"
+
+  # ---------------------------------------------------------------- amber
+  # Drafted, then reviewed by the code author and a docs maintainer.
+
+  - id: trio-amber-devices
+    tier: amber
+    reason: Pump and CGM drivers and their setup screens, including pairing
+    paths:
+      - "Trio/Sources/APS/CGM/*"
+      - "Trio/Sources/APS/Devices/*"
+      - "Trio/Sources/Services/Bluetooth/*"
+      - "Trio/Sources/Modules/PumpConfig/*"
+      - "Trio/Sources/Modules/CGMSettings/*"
+      - "Trio/Sources/Modules/LibreConfig/*"
+      - "Trio/Sources/Modules/Calibrations/*"
+      - "LoopKit"
+      - "LoopKit/*"
+      - "OmnipodKit*"
+      - "MinimedKit*"
+      - "RileyLinkKit*"
+      - "DanaKit*"
+      - "MedtrumKit*"
+      - "AccuChekKit*"
+      - "CGMBLEKit*"
+      - "G7SensorKit*"
+      - "LibreTransmitter*"
+      - "LibreLoop*"
+      - "EversenseKit*"
+      - "RoundWhiteDiscKit*"
+      - "dexcom-share-client-swift*"
+
+  - id: trio-amber-sync-and-remote
+    tier: amber
+    reason: Nightscout, remote control, Apple Health, Tidepool and telemetry
+    paths:
+      - "Trio/Sources/Services/Network/*"
+      - "Trio/Sources/Services/RemoteControl/*"
+      - "Trio/Sources/Services/HealthKit/*"
+      - "Trio/Sources/Services/Telemetry/*"
+      - "Trio/Sources/Modules/NightscoutConfig/*"
+      - "Trio/Sources/Modules/RemoteControlConfig/*"
+      - "Trio/Sources/Modules/HealthKit/*"
+      - "Trio/Sources/Modules/Telemetry/*"
+      - "TidepoolService*"
+
+  - id: trio-amber-watch-and-shortcuts
+    tier: amber
+    reason: Apple Watch, Live Activity and Shortcuts (some can start a bolus)
+    paths:
+      - "Trio Watch App*"
+      - "Trio Watch Complication/*"
+      - "LiveActivity/*"
+      - "Trio/Sources/Services/WatchManager/*"
+      - "Trio/Sources/Services/LiveActivity/*"
+      - "Trio/Sources/Shortcuts/*"
+      - "Trio/Sources/Modules/WatchConfig/*"
+      - "Trio/Sources/Modules/ShortcutsConfig/*"
+      - "Trio/Sources/Modules/LiveActivitySettings/*"
+
+  - id: trio-amber-build
+    tier: amber
+    reason: Browser Build, Xcode build and update steps
+    paths:
+      - ".github/workflows/*"
+      - "fastlane/*"
+      - "Config.xcconfig"
+      - "BuildTools/*"
+      - "Trio.xcodeproj/*"
+      - "Trio.xcworkspace/*"
+      - ".gitmodules"
+      - "patches/*"
+    keywords:
+      - "browser build"
+      - "xcode"
+      - "upgrade"
+
+  # ---------------------------------------------------------------- green
+  # Drafted; one human approves.
+
+  - id: trio-green-ui-and-text
+    tier: green
+    reason: UI layout and wording, translation-string plumbing, images
+    paths:
+      - "Trio/Sources/Views/*"
+      - "Trio/Sources/AnimatedBackground/*"
+      - "Trio/Sources/Services/Appearance/*"
+      - "Trio/Sources/Modules/UserInterfaceSettings/*"
+      - "Trio/Sources/Modules/IconConfig/*"
+      - "Trio/Sources/Localizations/*"
+      - "Trio/Resources/InfoPlist.xcstrings"
+      - "*.xcassets/*"
+
+  - id: trio-green-docs-and-tests
+    tier: green
+    reason: Documentation-only and test-only changes
+    paths:
+      - "*.md"
+      - "DeveloperDocs/*"
+      - "TrioTests/*"
