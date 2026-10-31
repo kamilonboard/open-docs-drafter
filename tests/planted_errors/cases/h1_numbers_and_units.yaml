@@ -38,19 +38,86 @@
 - id: pe-h1-unit-swap
   hazard: H1
   summary: >-
-    The number matches the code but the unit is wrong (mmol/L instead of mg/dL). Layer 1 only
-    checks numbers, so this needs the fact extraction and number check layers.
-  pr:
+    The number matches the code but the draft writes the wrong unit after it (mmol/L instead
+    of mg/dL). Units must come from the fact, so a unit typed after a placeholder fails.
+  pr: &high_target_pr
     title: Change the high target
     body: The default high target is now 180 mmol/L.
     files:
-      - path: Trio/Resources/json/defaults/settings/bg_targets.json
+      - path: Trio/Sources/Models/DecimalPickerSettings.swift
         patch: |
-          @@ -4 +4 @@
-          -      "high": 160,
-          +      "high": 180,
+          @@ -12 +12 @@
+          -    var high = PickerSetting(value: 160, step: 1, min: 100, max: 400, type: PickerSetting.PickerSettingType.glucose)
+          +    var high = PickerSetting(value: 180, step: 1, min: 100, max: 400, type: PickerSetting.PickerSettingType.glucose)
+  snapshot: &high_target_snapshot
+    Trio/Sources/Models/DecimalPickerSettings.swift: |
+      struct DecimalPickerSettings {
+          var high = PickerSetting(value: 180, step: 1, min: 100, max: 400, type: PickerSetting.PickerSettingType.glucose)
+      }
+  draft:
+    edits:
+      - doc_path: docs/settings/targets.md
+        claims:
+          - text: "The default high target is now {{fact:high.picker_default}} mmol/L."
+            citations:
+              - {path: Trio/Sources/Models/DecimalPickerSettings.swift, line: 12, side: new, quote: "value: 180"}
   expect:
     triage: {min_tier: red}
-    pending:
-      - component: layer 5
-        check: Number check rejects a unit that doesn't match the extracted fact's unit.
+    citation_check:
+      accepted: false
+      problems_include: [unit-after-placeholder]
+
+- id: pe-h1-number-copied-from-description
+  hazard: H1
+  summary: >-
+    The draft copies "180 mmol/L" from the PR description as plain text. Plain numbers are
+    never allowed, so the wrong unit can't get in this way either.
+  pr: *high_target_pr
+  snapshot: *high_target_snapshot
+  draft:
+    edits:
+      - doc_path: docs/settings/targets.md
+        claims:
+          - text: "The default high target is now 180 mmol/L."
+            citations:
+              - {path: Trio/Sources/Models/DecimalPickerSettings.swift, line: 12, side: new, quote: "value: 180"}
+  expect:
+    citation_check:
+      accepted: false
+      problems_include: [raw-number]
+
+- id: pe-h1-number-written-as-words
+  hazard: H1
+  summary: Writing a number as words ("twenty units") doesn't get past the number check.
+  pr: *high_target_pr
+  snapshot: *high_target_snapshot
+  draft:
+    edits:
+      - doc_path: docs/settings/targets.md
+        claims:
+          - text: "The high target can be raised by up to twenty units per step."
+            citations:
+              - {path: Trio/Sources/Models/DecimalPickerSettings.swift, line: 12, side: new, quote: "step: 1"}
+  expect:
+    citation_check:
+      accepted: false
+      problems_include: [raw-number]
+
+- id: pe-h1-correct-unit-comes-from-fact
+  hazard: H1
+  summary: >-
+    Control case: the same change drafted correctly is accepted, and the unit in the docs is
+    the one the code stores (mg/dL). Without this, a check that rejects everything would pass.
+  pr: *high_target_pr
+  snapshot: *high_target_snapshot
+  draft:
+    edits:
+      - doc_path: docs/settings/targets.md
+        claims:
+          - text: "The default high target is now {{fact:high.picker_default}}."
+            citations:
+              - {path: Trio/Sources/Models/DecimalPickerSettings.swift, line: 12, side: new, quote: "value: 180"}
+  expect:
+    citation_check:
+      accepted: true
+      rendered: ["The default high target is now 180 mg/dL."]

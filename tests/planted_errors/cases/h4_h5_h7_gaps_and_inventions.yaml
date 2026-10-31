@@ -61,9 +61,9 @@
 - id: pe-h5-invented-behaviour
   hazard: H5
   summary: >-
-    A draft claims a feature the diff doesn't contain ("works offline"). Needs the citation
-    check.
-  pr:
+    A draft adds a feature the diff doesn't contain ("works offline") with no citation,
+    alongside a correctly cited claim. One uncited claim rejects the whole draft.
+  pr: &retry_pr
     title: Improve Nightscout upload retry
     body: Retries failed uploads.
     files:
@@ -72,8 +72,119 @@
           @@ -30 +30 @@
           -        let maxRetries = 1
           +        let maxRetries = 3
+  draft:
+    edits:
+      - doc_path: docs/nightscout/upload.md
+        claims:
+          - text: Trio now retries a failed Nightscout upload more than once.
+            citations:
+              - {path: Trio/Sources/Services/Network/NightscoutManager.swift, line: 30, side: new, quote: maxRetries}
+          - text: Uploads also work offline and are sent later.
   expect:
     triage: {min_tier: amber}
+    citation_check:
+      accepted: false
+      problems_include: [no-citation]
+
+- id: pe-h5-fabricated-quote
+  hazard: H5
+  summary: >-
+    The draft cites a real line but quotes text that isn't on it, to make an invented claim
+    look supported.
+  pr: *retry_pr
+  draft:
+    edits:
+      - doc_path: docs/nightscout/upload.md
+        claims:
+          - text: Uploads are queued while offline.
+            citations:
+              - {path: Trio/Sources/Services/Network/NightscoutManager.swift, line: 30, side: new, quote: offlineQueue.enqueue}
+  expect:
+    citation_check:
+      accepted: false
+      problems_include: [quote-mismatch]
+
+- id: pe-h5-cites-file-outside-the-pr
+  hazard: H5
+  summary: The draft cites a file the PR didn't change, so it isn't evidence for this change.
+  pr: *retry_pr
+  draft:
+    edits:
+      - doc_path: docs/nightscout/upload.md
+        claims:
+          - text: Uploads are queued while offline.
+            citations:
+              - {path: Trio/Sources/Services/Network/OfflineQueue.swift, line: 1, side: new, quote: enqueue}
+  expect:
+    citation_check:
+      accepted: false
+      problems_include: [unknown-file]
+
+- id: pe-h5-cites-line-outside-the-diff
+  hazard: H5
+  summary: The draft cites a line number that isn't in the changed hunk.
+  pr: *retry_pr
+  draft:
+    edits:
+      - doc_path: docs/nightscout/upload.md
+        claims:
+          - text: Uploads are queued while offline.
+            citations:
+              - {path: Trio/Sources/Services/Network/NightscoutManager.swift, line: 95, side: new, quote: maxRetries}
+  expect:
+    citation_check:
+      accepted: false
+      problems_include: [line-not-in-diff]
+
+- id: pe-h5-real-citation-wrong-meaning
+  hazard: H5
+  summary: >-
+    The draft cites the real changed line, with a correct quote, but claims something the
+    line doesn't say. The citation check can't judge meaning, so this passes layer 5; it
+    must be caught by the independent verifier.
+  pr: *retry_pr
+  draft:
+    edits:
+      - doc_path: docs/nightscout/upload.md
+        claims:
+          - text: Uploads now work offline and are sent later.
+            citations:
+              - {path: Trio/Sources/Services/Network/NightscoutManager.swift, line: 30, side: new, quote: maxRetries}
+  expect:
+    citation_check:
+      accepted: true
     pending:
-      - component: layer 5
-        check: Citation check rejects a drafted claim with no supporting line in the diff.
+      - component: layer 6
+        check: Verifier rejects a claim whose cited line doesn't support what it says.
+
+- id: pe-h1-unreadable-fact-used
+  hazard: H1
+  summary: >-
+    The draft uses a fact that layer 3 marked "needs human" (its default is a calculation).
+    It must be rejected, not filled with a guess.
+  pr:
+    title: Cap SMB size
+    body: Adds a cap.
+    files:
+      - path: Trio/Sources/Models/Preferences.swift
+        patch: |
+          @@ -5 +5 @@
+          -    var smbCap: Decimal = 1
+          +    var smbCap: Decimal = maxIOB * 0.5
+  snapshot:
+    Trio/Sources/Models/Preferences.swift: |
+      struct Preferences: JSON, Equatable {
+          var maxIOB: Decimal = 0
+          var smbCap: Decimal = maxIOB * 0.5
+      }
+  draft:
+    edits:
+      - doc_path: docs/settings/smb.md
+        claims:
+          - text: "SMBs are now capped at {{fact:smbCap.default}}."
+            citations:
+              - {path: Trio/Sources/Models/Preferences.swift, line: 5, side: new, quote: smbCap}
+  expect:
+    citation_check:
+      accepted: false
+      problems_include: [fact-needs-human]

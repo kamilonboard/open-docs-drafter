@@ -49,9 +49,13 @@ uv run pytest tests/planted_errors -rs
 | `facts.needs_human` | Layer 3 can't read these settings exactly and says why |
 | `facts.values` | `setting.kind: value` pairs Layer 3 must extract exactly |
 | `facts.changes` | Exact before-and-after facts between `base_snapshot` and `snapshot` |
+| `citation_check.accepted` | Layer 5 accepts (or rejects) the case's `draft` |
+| `citation_check.problems_include` | Layer 5 reports these problem codes |
+| `citation_check.rendered` | The claims' text after placeholders are filled from facts |
 | `pending` | A check for a layer not built yet; shown as a skipped test |
 
-Fact cases use `snapshot` (whole files, path to text) instead of `pr`.
+Fact cases use `snapshot` (whole files, path to text) instead of `pr`. Citation cases add a
+`draft` in the format of [`drafts.py`](../../src/open_docs_drafter/drafts.py).
 
 Case files are validated strictly. A misspelt key is an error, never a silent pass.
 
@@ -91,3 +95,18 @@ Layer 3 (fact extraction), checked the same way:
 | Treating calculations as unreadable | 1 |
 | Flagging runtime-dependent help text | 1 |
 | Linking JSON keys to Swift names | 1 |
+
+Layer 5 (citation and number check), checked the same way:
+
+| Safeguard removed | Cases failed |
+|---|---:|
+| Rejecting uncited claims | 1 |
+| Quote check | 1 |
+| Line-in-diff check | 1 |
+| File-in-PR check | 1 |
+| Rejecting plain numbers | 1 |
+| Rejecting numbers written as words | 1 |
+| Rejecting units typed after a placeholder | 1 |
+| Refusing facts that need a human | 1 |
+| Units rendered from the fact | 1 |
+| `DecimalPickerSettings.swift` red rule | 1 |

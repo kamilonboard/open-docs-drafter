@@ -92,8 +92,11 @@ rules:
 
   - id: trio-red-defaults-and-migrations
     tier: red
-    reason: Default values, stored settings and data migrations (settings may reset)
+    reason: Default values, allowed ranges, stored settings and data migrations (settings may reset)
     paths:
+      - "Trio/Sources/Models/Preferences.swift" # algorithm setting defaults
+      - "Trio/Sources/Models/DecimalPickerSettings.swift" # allowed min/max/step for settings
+      - "Trio/Sources/Models/PumpSettings.swift" # max basal, max bolus
       - "Trio/Resources/json/defaults/*"
       - "Trio/Sources/Services/SettingsManager/*"
       - "Model/*.xcdatamodeld/*" # Core Data schema only; helpers under Model/ are not migrations

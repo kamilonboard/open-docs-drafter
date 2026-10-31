@@ -18,7 +18,9 @@ from typing import Any
 import pytest
 import yaml
 
-from open_docs_drafter.facts import Kind, inconsistencies
+from open_docs_drafter.drafts import Draft, parse_draft
+from open_docs_drafter.facts import FactSet, Kind, inconsistencies
+from open_docs_drafter.layers.citation_check import check_draft
 from open_docs_drafter.layers.fact_extraction import extract_facts, fact_changes
 from open_docs_drafter.layers.input_check import check_input
 from open_docs_drafter.layers.triage import rule_based_tier
@@ -29,10 +31,21 @@ from open_docs_drafter.tiers import Tier
 HERE = Path(__file__).parent
 PROFILES = {"trio": HERE.parent.parent / "profiles" / "trio" / "profile.yaml"}
 
-_CASE_KEYS = {"id", "hazard", "summary", "profile", "pr", "snapshot", "base_snapshot", "expect"}
+_CASE_KEYS = {
+    "id",
+    "hazard",
+    "summary",
+    "profile",
+    "pr",
+    "snapshot",
+    "base_snapshot",
+    "draft",
+    "expect",
+}
 _PR_KEYS = {"title", "body", "files"}
 _FILE_KEYS = {"path", "patch"}
-_EXPECT_KEYS = {"triage", "input_check", "facts", "pending"}
+_EXPECT_KEYS = {"triage", "input_check", "facts", "citation_check", "pending"}
+_CITATION_KEYS = {"accepted", "problems_include", "rendered"}
 _FACTS_KEYS = {"inconsistent", "consistent", "needs_human", "values", "changes"}
 _CHANGE_KEYS = {"setting", "kind", "old", "new"}
 _TRIAGE_KEYS = {"min_tier"}
@@ -49,6 +62,7 @@ class Case:
     pr: PullRequest | None
     snapshot: dict[str, str] | None  # Whole files (path -> text) for fact extraction.
     base_snapshot: dict[str, str] | None  # The same files before the change.
+    draft: Draft | None  # A draft as layer 4 would produce it.
     expect: dict[str, Any]
     source: str
 
@@ -123,6 +137,16 @@ def load_cases() -> list[Case]:
                     raise ValueError(f"{where}: input_check is empty")
                 if "diff_tier_min" in ic:
                     _tier(ic["diff_tier_min"], f"{where} input_check")
+            draft = parse_draft(raw["draft"]) if "draft" in raw else None
+            if "citation_check" in expect:
+                cc = expect["citation_check"]
+                _keys(cc, _CITATION_KEYS, f"{where} citation_check", {"accepted"})
+                if draft is None or pr is None:
+                    raise ValueError(f"{where}: citation_check needs a `draft` and a `pr`")
+                if cc["accepted"] and cc.get("problems_include"):
+                    raise ValueError(f"{where}: an accepted draft can't expect problems")
+                if not cc["accepted"] and not cc.get("problems_include"):
+                    raise ValueError(f"{where}: say which problems must reject the draft")
             if ("triage" in expect or "input_check" in expect) and pr is None:
                 raise ValueError(f"{where}: triage and input_check checks need a `pr`")
             if "facts" in expect:
@@ -152,6 +176,7 @@ def load_cases() -> list[Case]:
                     pr=pr,
                     snapshot=raw.get("snapshot"),
                     base_snapshot=raw.get("base_snapshot"),
+                    draft=draft,
                     expect=expect,
                     source=path.name,
                 )
@@ -243,6 +268,21 @@ def test_facts(case: Case) -> None:
             {k: (str(v) if v is not None else None) for k, v in c.items()} for c in want["changes"]
         ]
         assert got_changes == expected_changes, f"{case.id}: changes {got_changes}"
+
+
+@pytest.mark.parametrize("case", _ids("citation_check"))
+def test_citation_check(case: Case) -> None:
+    assert case.draft is not None and case.pr is not None
+    want = case.expect["citation_check"]
+    facts = extract_facts(profile_for(case), case.snapshot) if case.snapshot else FactSet([])
+    result = check_draft(case.draft, case.pr, facts)
+    found = {p.code for p in result.problems}
+    details = "; ".join(p.detail for p in result.problems)
+    assert result.accepted is want["accepted"], f"{case.id}: problems: {details or 'none'}"
+    for code in want.get("problems_include", []):
+        assert code in found, f"{case.id}: expected {code!r}, got {sorted(found)}"
+    if "rendered" in want:
+        assert [c.rendered for c in result.claims] == want["rendered"], case.id
 
 
 # ------------------------------------------------------------------ layers not built yet
