@@ -426,6 +426,6 @@ def test_audit_record(tmp_path: Path) -> None:
     assert d["system_prompt"] and d["user_message"] and d["raw_output"]
     assert record["layer_5_citation_check"]["accepted"] is True
     assert record["layer_7_edit_constraints"]["pages_changed"] == [REMOTE_PAGE]
-    assert record["layer_6_verifier"] == "not built yet"
+    assert record["layer_6_verifier"] is None  # no verifier was given
     path = pipeline.write_audit(record, tmp_path)
     assert json.loads(path.read_text())["outcome"] == "awaiting_verifier"

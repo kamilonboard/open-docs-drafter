@@ -80,6 +80,10 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="pin the model exactly; a refusal becomes 'needs human' (hazard H10)",
     )
+    dr.add_argument(
+        "--verifier-provider", choices=sorted(PROVIDERS), help="default: same as --provider"
+    )
+    dr.add_argument("--verifier-model", help="default: the verifier provider's default model")
     dr.add_argument("--cache-dir", default=".cache")
     dr.add_argument("--out", default="runs", help="where to write the audit record")
 
@@ -243,6 +247,11 @@ def _draft(args: argparse.Namespace, profile: Profile) -> int:
         options.update(effort=args.effort, fallbacks=not args.no_fallbacks)
     try:
         provider = make_provider(args.provider, **options)
+        verifier_name = args.verifier_provider or args.provider
+        verifier_options: dict[str, object] = {"model": args.verifier_model}
+        if verifier_name == "claude":
+            verifier_options.update(effort=args.effort, fallbacks=not args.no_fallbacks)
+        verifier = make_provider(verifier_name, **verifier_options)
         pr = fetch_pull(client, PullRequestCache(cache_root / "backtest", repo), repo, args.pr)
         head = pr.merge_commit_sha
         parents = client.commit(repo, head)["parents"]
@@ -268,8 +277,21 @@ def _draft(args: argparse.Namespace, profile: Profile) -> int:
         return 1
 
     print(f"  drafting with {provider.name} ({provider.model}) ...", flush=True)
+    print(f"  verifying with {verifier.name} ({verifier.model})", flush=True)
+    if (verifier.name, verifier.model) == (provider.name, provider.model):
+        print(
+            "  warning: the verifier is the same model as the drafter, so it is only partly "
+            "independent. Use --verifier-provider or --verifier-model to change it.",
+            flush=True,
+        )
     result = pipeline.run(
-        profile, pr, provider=provider, base_files=base_files, head_files=head_files, pages=pages
+        profile,
+        pr,
+        provider=provider,
+        verifier=verifier,
+        base_files=base_files,
+        head_files=head_files,
+        pages=pages,
     )
     record = pipeline.audit_record(profile, pr, result)
     record["refs"] = {"code_merge": head, "code_base": base, "docs": docs_sha}
@@ -291,6 +313,16 @@ def _draft(args: argparse.Namespace, profile: Profile) -> int:
         for claim_result in result.citations.claims:
             for prob in claim_result.problems:
                 print(f"  layer 5 {prob.code}: {prob.detail}")
+    if result.verification:
+        for verdict in result.verification.verdicts:
+            print(
+                f"  layer 6 claim {verdict.claim_id} {verdict.verdict.value}: {verdict.explanation}"
+            )
+        for omission in result.verification.omissions:
+            print(f"  layer 6 omission: {omission}")
+        for v_problem in result.verification.problems:
+            if v_problem.code.startswith("verifier-"):
+                print(f"  layer 6 {v_problem.code}: {v_problem.detail}")
     if result.edits:
         for edit_problem in result.edits.problems:
             print(f"  layer 7 {edit_problem.code}: {edit_problem.detail}")

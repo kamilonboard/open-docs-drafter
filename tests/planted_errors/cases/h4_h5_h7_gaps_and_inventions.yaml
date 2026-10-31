@@ -134,7 +134,7 @@
     citation_check:
       accepted: true
     pending:
-      - component: layer 6
+      - component: layer 6 with a real model (live eval)
         check: Verifier rejects a claim whose cited line doesn't support what it says.
 
 - id: pe-h1-unreadable-fact-used

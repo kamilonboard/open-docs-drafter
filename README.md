@@ -1,6 +1,6 @@
 # open-docs-drafter
 
-**Status: early development.** Layers 1–5 and 7 are built, plus rule-based triage and the planted-error suite. Drafting (layer 4) works as a dry run: it never writes to GitHub. The independent verifier (layer 6) is next.
+**Status: early development.** All seven automated layers are built, plus the planted-error suite. The tool runs as a dry run only: it never writes to GitHub. It has not yet been measured with a real model.
 
 open-docs-drafter watches open-source automated insulin delivery (OS-AID) projects on GitHub and drafts documentation updates from merged code changes. It only opens **draft pull requests for human review**. It never merges anything.
 
@@ -54,7 +54,8 @@ These rules live in the core engine. A project profile can add rules but can nev
 - [x] Deterministic layers (1, 3, 5, 7) with their own tests
 - [x] Planted-error test suite, built before any drafting code ([tests/planted_errors](tests/planted_errors); 3 checks pending later layers)
 - [x] Drafting (layer 4), dry run only, with a swappable model provider
-- [ ] Independent verifier (layer 6)
+- [x] Independent verifier (layer 6)
+- [ ] Live evaluation with real models (drafting and verifier accuracy)
 - [ ] Backtest on past Trio releases
 - [ ] Shadow mode, agreed with Trio maintainers
 
@@ -69,7 +70,8 @@ uv run open-docs-drafter draft --profile profiles/trio/profile.yaml --pr 1707
 This drafts docs for one merged Trio PR, runs every check, prints the resulting docs diff
 and writes a full audit record to `runs/`. It never writes to GitHub. Use
 `--provider fake` to test the plumbing without calling a model, `--model` to choose
-another model, and `--no-fallbacks` to pin the model exactly.
+another model, and `--no-fallbacks` to pin the model exactly. The verifier defaults to the same provider and
+model as the drafter; set `--verifier-provider` or `--verifier-model` to make it more independent.
 
 Model providers live in [`src/open_docs_drafter/providers`](src/open_docs_drafter/providers).
 Adding one (for example a local open model) means implementing one method,

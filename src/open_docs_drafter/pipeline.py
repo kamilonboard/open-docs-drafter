@@ -1,10 +1,11 @@
 """Run the layers in order on one merged pull request.
 
     1 input check -> 2 triage -> 3 facts -> 4 drafting -> 5 citation check
-    -> (6 verifier: not built yet) -> 7 edit constraints -> 8 human review
+    -> 7 edit constraints -> 6 independent verifier -> 8 human review
 
-Each layer can stop the run. The result records what every layer saw and decided, for
-the audit log. Nothing here writes to GitHub.
+Every layer must pass. Layer 7 runs before layer 6 because it is plain code: a draft it
+rejects never costs a verifier call. The result records what every layer saw and
+decided, for the audit log. Nothing here writes to GitHub.
 """
 
 import json
@@ -21,6 +22,7 @@ from open_docs_drafter.layers.citation_check import CitationCheckResult, check_d
 from open_docs_drafter.layers.edit_constraints import EditCheckResult, check_edits
 from open_docs_drafter.layers.input_check import InputCheckResult, check_input
 from open_docs_drafter.layers.triage import TriageResult, rule_based_tier
+from open_docs_drafter.layers.verifier import VerifierResult, verify
 from open_docs_drafter.models import PullRequest, changed_lines
 from open_docs_drafter.profile import Profile
 from open_docs_drafter.providers import Provider
@@ -30,8 +32,10 @@ class Outcome(StrEnum):
     RED_EVIDENCE_PACK = "red_evidence_pack"  # Human expert writes it; no AI text
     NO_DOCS_CHANGE = "no_docs_change"
     NEEDS_HUMAN = "needs_human"
-    REJECTED = "rejected"  # A check layer rejected the draft
-    AWAITING_VERIFIER = "awaiting_verifier"  # Passed layers 5 and 7; layer 6 not built yet
+    REJECTED = "rejected"  # A plain-code check (layer 5 or 7) rejected the draft
+    ESCALATED = "escalated"  # The verifier (layer 6) sent it to a human
+    AWAITING_VERIFIER = "awaiting_verifier"  # Passed layers 5 and 7; no verifier was run
+    READY_FOR_REVIEW = "ready_for_review"  # Passed every automated layer; a human decides
 
 
 @dataclass(frozen=True)
@@ -43,6 +47,7 @@ class PipelineResult:
     drafting: drafting.DraftingResult
     citations: CitationCheckResult | None = None
     edits: EditCheckResult | None = None
+    verification: VerifierResult | None = None
 
 
 def run(
@@ -50,6 +55,7 @@ def run(
     pr: PullRequest,
     *,
     provider: Provider,
+    verifier: Provider | None = None,
     base_files: Mapping[str, str],
     head_files: Mapping[str, str],
     pages: Mapping[str, str],
@@ -77,37 +83,32 @@ def run(
     # Layer 5: every claim backed by evidence; numbers only from facts.
     citations = check_draft(dr.draft, pr, head_facts)
     if not citations.accepted:
-        return PipelineResult(
-            Outcome.REJECTED,
-            f"layer 5 rejected the draft: {_codes(citations.problems)}",
-            ic,
-            triage,
-            dr,
-            citations,
-        )
+        summary = f"layer 5 rejected the draft: {_codes(citations.problems)}"
+        return PipelineResult(Outcome.REJECTED, summary, ic, triage, dr, citations)
 
     # Layer 7: safe edits to allowed pages; warning boxes untouched.
     edits = check_edits(profile, dr.draft, citations, pages)
     if not edits.accepted:
+        summary = f"layer 7 rejected the draft: {_codes(edits.problems)}"
+        return PipelineResult(Outcome.REJECTED, summary, ic, triage, dr, citations, edits)
+
+    if verifier is None:
+        summary = "passed layers 5 and 7; no verifier was run, so it can't go to review"
+        return PipelineResult(Outcome.AWAITING_VERIFIER, summary, ic, triage, dr, citations, edits)
+
+    # Layer 6: a second model checks each claim, without the drafter's reasoning.
+    verification = verify(
+        profile, pr, dr.draft, citations, head_facts, changes, drafter=provider, verifier=verifier
+    )
+    if not verification.accepted:
+        summary = f"layer 6 escalated the draft: {_codes(verification.problems)}"
         return PipelineResult(
-            Outcome.REJECTED,
-            f"layer 7 rejected the draft: {_codes(edits.problems)}",
-            ic,
-            triage,
-            dr,
-            citations,
-            edits,
+            Outcome.ESCALATED, summary, ic, triage, dr, citations, edits, verification
         )
 
+    summary = "passed every automated layer; a human reviews it before anything is published"
     return PipelineResult(
-        Outcome.AWAITING_VERIFIER,
-        "passed layers 5 and 7; the independent verifier (layer 6) and a human "
-        "still need to check it",
-        ic,
-        triage,
-        dr,
-        citations,
-        edits,
+        Outcome.READY_FOR_REVIEW, summary, ic, triage, dr, citations, edits, verification
     )
 
 
@@ -168,7 +169,7 @@ def audit_record(profile: Profile, pr: PullRequest, result: PipelineResult) -> d
                 for c in result.citations.claims
             ],
         },
-        "layer_6_verifier": "not built yet",
+        "layer_6_verifier": _verifier_record(result.verification),
         "layer_7_edit_constraints": None
         if result.edits is None
         else {
@@ -176,6 +177,31 @@ def audit_record(profile: Profile, pr: PullRequest, result: PipelineResult) -> d
             "problems": [f"{p.code}: {p.detail}" for p in result.edits.problems],
             "pages_changed": sorted(result.edits.new_pages),
         },
+    }
+
+
+def _verifier_record(v: VerifierResult | None) -> dict[str, Any] | None:
+    if v is None:
+        return None
+    r = v.response
+    return {
+        "accepted": v.accepted,
+        "independence": v.independence.value,
+        "provider": r.provider if r else None,
+        "model_requested": r.model_requested if r else None,
+        "model_served": r.model_served if r else None,
+        "stop_reason": r.stop_reason if r else None,
+        "request_id": r.request_id if r else None,
+        "usage": r.usage if r else None,
+        "verdicts": [
+            {"claim": c.claim_id, "text": c.text, "verdict": c.verdict.value, "why": c.explanation}
+            for c in v.verdicts
+        ],
+        "omissions": list(v.omissions),
+        "problems": [f"{p.code}: {p.detail}" for p in v.problems],
+        "system_prompt": v.system,
+        "user_message": v.user,
+        "raw_output": v.raw_output,
     }
 
 

@@ -28,7 +28,7 @@ from open_docs_drafter.facts import Fact, FactChange, FactSet, Kind
 from open_docs_drafter.keywords import contains_keyword, words
 from open_docs_drafter.layers.edit_constraints import page_allowed
 from open_docs_drafter.layers.input_check import InputCheckResult
-from open_docs_drafter.models import PullRequest, changed_lines, patch_lines
+from open_docs_drafter.models import PullRequest, changed_lines, render_diff
 from open_docs_drafter.profile import Profile
 from open_docs_drafter.providers import Provider, ProviderError, ProviderResponse
 from open_docs_drafter.tiers import Tier
@@ -328,17 +328,7 @@ def user_message(
         parts.append(f"Description:\n{input_check.description or '(none)'}")
     parts.append("</pull_request>\n")
 
-    parts.append("<diff>")
-    for f in pr.files:
-        parts.append(f"### {f.path}")
-        lines = patch_lines(f.patch)
-        if not lines:
-            parts.append("(no line-level diff available for this file; it can't be cited)")
-        for line in lines:
-            old = f"old {line.old_line}" if line.old_line is not None else ""
-            new = f"new {line.new_line}" if line.new_line is not None else ""
-            parts.append(f"{old:>9} {new:>9} {line.marker} {line.text}")
-    parts.append("</diff>\n")
+    parts.append(f"<diff>\n{render_diff(pr)}\n</diff>\n")
 
     parts.append("<facts>")
     if not settings:

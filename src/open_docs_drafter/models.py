@@ -92,3 +92,18 @@ def changed_lines(patch: str) -> list[str]:
         for line in patch.splitlines()
         if line[:1] in ("+", "-") and not line.startswith(("+++", "---"))
     ]
+
+
+def render_diff(pr: PullRequest) -> str:
+    """The PR's diff with explicit old and new line numbers, as models see it."""
+    parts: list[str] = []
+    for f in pr.files:
+        parts.append(f"### {f.path}")
+        lines = patch_lines(f.patch)
+        if not lines:
+            parts.append("(no line-level diff available for this file; it can't be cited)")
+        for line in lines:
+            old = f"old {line.old_line}" if line.old_line is not None else ""
+            new = f"new {line.new_line}" if line.new_line is not None else ""
+            parts.append(f"{old:>9} {new:>9} {line.marker} {line.text}")
+    return "\n".join(parts)
