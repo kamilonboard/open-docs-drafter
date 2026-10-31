@@ -9,8 +9,8 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from open_docs_drafter.github import PullRequest
 from open_docs_drafter.layers.triage import TriageResult, rule_based_tier
+from open_docs_drafter.models import PullRequest, changed_lines
 from open_docs_drafter.profile import Profile
 from open_docs_drafter.tiers import Tier
 
@@ -43,15 +43,6 @@ class TierChange:
     @property
     def lowered(self) -> bool:
         return self.after < self.before
-
-
-def changed_lines(patch: str) -> list[str]:
-    """Added and removed lines from unified diff hunks, without the +/- marker."""
-    return [
-        line[1:]
-        for line in patch.splitlines()
-        if line[:1] in ("+", "-") and not line.startswith(("+++", "---"))
-    ]
 
 
 def triage_pr(profile: Profile, pr: PullRequest) -> PRResult:

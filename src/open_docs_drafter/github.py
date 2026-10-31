@@ -10,43 +10,16 @@ import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+
+from open_docs_drafter.models import ChangedFile, PullRequest
 
 API = "https://api.github.com"
 
 
 class GitHubError(RuntimeError):
     pass
-
-
-@dataclass(frozen=True)
-class ChangedFile:
-    path: str
-    patch: str  # Unified diff hunks; empty for binary or very large files.
-
-
-@dataclass(frozen=True)
-class PullRequest:
-    number: int
-    title: str
-    body: str
-    merged_at: str
-    files: tuple[ChangedFile, ...]
-
-    def to_json(self) -> dict[str, Any]:
-        return asdict(self)
-
-    @classmethod
-    def from_json(cls, data: dict[str, Any]) -> "PullRequest":
-        return cls(
-            number=int(data["number"]),
-            title=data["title"],
-            body=data.get("body") or "",
-            merged_at=data["merged_at"],
-            files=tuple(ChangedFile(f["path"], f.get("patch") or "") for f in data["files"]),
-        )
 
 
 def find_token() -> str | None:
