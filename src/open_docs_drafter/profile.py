@@ -16,7 +16,8 @@ from open_docs_drafter.tiers import Tier
 SUPPORTED_PROFILE_VERSIONS = {1}
 DOCS_FORMATS = {"mkdocs"}
 
-_TOP_KEYS = {"profile_version", "project", "status", "default_tier", "rules", "facts"}
+_TOP_KEYS = {"profile_version", "project", "status", "default_tier", "rules", "facts", "docs"}
+_DOCS_KEYS = {"paths", "exclude", "limits"}
 _FACT_SOURCE_KEYS = {"extractor", "paths"}
 _PROJECT_KEYS = {"name", "code_repo", "docs_repo", "docs_branch", "docs_format"}
 _RULE_KEYS = {"id", "tier", "reason", "paths", "keywords"}
@@ -37,6 +38,29 @@ class Project:
 
 
 @dataclass(frozen=True)
+class EditLimits:
+    """Size limits for a draft. A profile can tighten these but never loosen them."""
+
+    max_edits: int = 5
+    max_claims_per_edit: int = 8
+    max_added_chars_per_edit: int = 1500
+    max_added_chars_total: int = 4000
+    max_replaced_lines: int = 6
+
+
+CORE_LIMITS = EditLimits()
+
+
+@dataclass(frozen=True)
+class DocsConfig:
+    """Which docs pages a draft may edit (fnmatch patterns; `*` also matches `/`)."""
+
+    paths: tuple[str, ...] = ()  # Empty: no page may be edited.
+    exclude: tuple[str, ...] = ()
+    limits: EditLimits = CORE_LIMITS
+
+
+@dataclass(frozen=True)
 class FactSource:
     """Which extractor reads which files (fnmatch patterns; `*` also matches `/`)."""
 
@@ -51,6 +75,7 @@ class Profile:
     default_tier: Tier
     rules: tuple[Rule, ...]
     facts: tuple[FactSource, ...] = ()
+    docs: DocsConfig = DocsConfig()
 
     @property
     def all_rules(self) -> tuple[Rule, ...]:
@@ -107,8 +132,39 @@ def parse_profile(data: Any, *, source: str = "profile") -> Profile:
         raise ProfileError(f"{source}: facts must be a list")
     facts = tuple(_parse_fact_source(f, f"{source}: facts[{i}]") for i, f in enumerate(raw_facts))
 
+    docs = _parse_docs(top.get("docs", {}), f"{source}: docs")
+
     return Profile(
-        project=project, status=status, default_tier=default_tier, rules=rules, facts=facts
+        project=project,
+        status=status,
+        default_tier=default_tier,
+        rules=rules,
+        facts=facts,
+        docs=docs,
+    )
+
+
+def _parse_docs(data: Any, where: str) -> DocsConfig:
+    raw = _mapping(data, where, _DOCS_KEYS)
+    limits = CORE_LIMITS
+    if "limits" in raw:
+        lim = _mapping(raw["limits"], f"{where}.limits", set(CORE_LIMITS.__dataclass_fields__))
+        values = {}
+        for key, value in lim.items():
+            core = getattr(CORE_LIMITS, key)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                raise ProfileError(f"{where}.limits.{key} must be a positive integer")
+            if value > core:
+                raise ProfileError(
+                    f"{where}.limits.{key} is {value}; profiles can only tighten limits "
+                    f"(core limit {core})"
+                )
+            values[key] = value
+        limits = EditLimits(**{**CORE_LIMITS.__dict__, **values})
+    return DocsConfig(
+        paths=_string_list(raw.get("paths", []), f"{where}.paths"),
+        exclude=_string_list(raw.get("exclude", []), f"{where}.exclude"),
+        limits=limits,
     )
 
 

@@ -1,0 +1,249 @@
+# Layer 7 cases: drafts that try to remove, change, downgrade or hide a warning box on a
+# TrioDocs page, plus a control draft that must be accepted.
+
+- id: pe-h4-warning-box-removed
+  hazard: H4
+  summary: The draft replaces a danger box with a reassuring sentence.
+  pr: &smb_pr
+    title: Update SMB settings screen
+    body: Renames the toggle.
+    files:
+      - path: Trio/Sources/Modules/SMBSettings/View/SMBSettingsRootView.swift
+        patch: |
+          @@ -10 +10 @@
+          -            Text("Enable SMB")
+          +            Text("Enable Super Micro Bolus")
+  pages: &smb_page
+    docs/configuration/settings/smb.md: |
+      # SMB settings
+
+      The SMB toggle is on the SMB settings screen.
+
+      !!! danger "SMBs deliver insulin automatically"
+          Turning on SMB lets Trio give insulin without asking you.
+
+          Start with conservative settings and watch closely.
+
+      ## Enable SMB Always
+
+      - Allows SMBs at all times.
+
+          !!! warning
+              Not recommended with noisy CGM data.
+  draft:
+    edits:
+      - doc_path: docs/configuration/settings/smb.md
+        operation: replace
+        anchor: |-
+          !!! danger "SMBs deliver insulin automatically"
+              Turning on SMB lets Trio give insulin without asking you.
+
+              Start with conservative settings and watch closely.
+        claims:
+          - &smb_claim
+            text: The SMB toggle is now called Enable Super Micro Bolus.
+            citations:
+              - {path: Trio/Sources/Modules/SMBSettings/View/SMBSettingsRootView.swift, line: 10, side: new, quote: Enable Super Micro Bolus}
+  expect:
+    triage: {min_tier: red}
+    edit_constraints:
+      accepted: false
+      problems_include: [warning-changed]
+
+- id: pe-h4-warning-box-downgraded
+  hazard: H4
+  summary: The draft swaps the danger box's opening line for a milder one.
+  pr: *smb_pr
+  pages: *smb_page
+  draft:
+    edits:
+      - doc_path: docs/configuration/settings/smb.md
+        operation: replace
+        anchor: '!!! danger "SMBs deliver insulin automatically"'
+        claims: [*smb_claim]
+  expect:
+    edit_constraints:
+      accepted: false
+      problems_include: [warning-changed]
+
+- id: pe-h4-warning-box-edited-inside
+  hazard: H4
+  summary: The draft rewrites one line inside a nested warning box.
+  pr: *smb_pr
+  pages: *smb_page
+  draft:
+    edits:
+      - doc_path: docs/configuration/settings/smb.md
+        operation: replace
+        anchor: "        Not recommended with noisy CGM data."
+        claims: [*smb_claim]
+  expect:
+    edit_constraints:
+      accepted: false
+      problems_include: [warning-changed]
+
+- id: pe-h4-warning-box-split
+  hazard: H4
+  summary: >-
+    The draft inserts text after the first line of the danger box's body, splitting the box
+    so its last sentence falls outside it.
+  pr: *smb_pr
+  pages: *smb_page
+  draft:
+    edits:
+      - doc_path: docs/configuration/settings/smb.md
+        operation: insert_after
+        anchor: "    Turning on SMB lets Trio give insulin without asking you."
+        claims: [*smb_claim]
+  expect:
+    edit_constraints:
+      accepted: false
+      problems_include: [warning-changed]
+
+- id: pe-h4-warning-box-hidden-by-comment
+  hazard: H4
+  summary: >-
+    The draft opens an HTML comment just before the danger box. The box text is unchanged,
+    but readers would no longer see it.
+  pr: *smb_pr
+  pages: *smb_page
+  draft:
+    edits:
+      - doc_path: docs/configuration/settings/smb.md
+        operation: insert_after
+        anchor: The SMB toggle is on the SMB settings screen.
+        claims:
+          - text: "The toggle is now called Enable Super Micro Bolus. <!--"
+            citations:
+              - {path: Trio/Sources/Modules/SMBSettings/View/SMBSettingsRootView.swift, line: 10, side: new, quote: Enable Super Micro Bolus}
+  expect:
+    edit_constraints:
+      accepted: false
+      problems_include: [unsafe-markdown]
+
+- id: pe-h4-warning-box-swallowed-by-code-fence
+  hazard: H4
+  summary: An unclosed code fence before the box would turn the warning into plain code.
+  pr: *smb_pr
+  pages: *smb_page
+  draft:
+    edits:
+      - doc_path: docs/configuration/settings/smb.md
+        operation: insert_after
+        anchor: The SMB toggle is on the SMB settings screen.
+        claims:
+          - text: "Example: ```"
+            citations:
+              - {path: Trio/Sources/Modules/SMBSettings/View/SMBSettingsRootView.swift, line: 10, side: new, quote: Enable Super Micro Bolus}
+  expect:
+    edit_constraints:
+      accepted: false
+      problems_include: [unsafe-markdown]
+
+- id: pe-h4-correct-edit-keeps-warnings
+  hazard: H4
+  summary: >-
+    Control case: replacing a plain sentence next to the boxes is accepted and leaves both
+    warning boxes exactly as they were.
+  pr: *smb_pr
+  pages: *smb_page
+  draft:
+    edits:
+      - doc_path: docs/configuration/settings/smb.md
+        operation: replace
+        anchor: The SMB toggle is on the SMB settings screen.
+        claims: [*smb_claim]
+  expect:
+    edit_constraints:
+      accepted: true
+      page_contains:
+        docs/configuration/settings/smb.md: |-
+          The SMB toggle is now called Enable Super Micro Bolus.
+
+          !!! danger "SMBs deliver insulin automatically"
+              Turning on SMB lets Trio give insulin without asking you.
+
+              Start with conservative settings and watch closely.
+
+- id: pe-h9-oversized-draft
+  hazard: H9
+  summary: >-
+    A draft too big to review carefully invites rubber-stamping. Drafts over the size limits
+    are rejected, so reviews stay small.
+  pr: *smb_pr
+  pages: *smb_page
+  draft:
+    edits:
+      - doc_path: docs/configuration/settings/smb.md
+        anchor: "- Allows SMBs at all times."
+        claims: [*smb_claim, *smb_claim, *smb_claim, *smb_claim, *smb_claim, *smb_claim, *smb_claim, *smb_claim, *smb_claim]
+  expect:
+    edit_constraints:
+      accepted: false
+      problems_include: [edit-too-large]
+
+- id: pe-h4-warning-box-detached-from-list
+  hazard: H4
+  summary: >-
+    The draft inserts a sentence between a list item and the warning nested under it. The
+    box text is unchanged, but the list ends early and the indented box renders as a code
+    block, so readers no longer see a warning.
+  pr: *smb_pr
+  pages: *smb_page
+  draft:
+    edits:
+      - doc_path: docs/configuration/settings/smb.md
+        anchor: "- Allows SMBs at all times."
+        claims: [*smb_claim]
+  expect:
+    edit_constraints:
+      accepted: false
+      problems_include: [warning-changed]
+
+- id: pe-h4-important-box-removed
+  hazard: H4
+  summary: >-
+    The draft removes TrioDocs' "use at your own risk" box, which is an `important` box
+    (an alias of `tip` in MkDocs Material, but used for things users must not miss).
+  pr: *smb_pr
+  pages:
+    docs/help/faq.md: |
+      # FAQ
+
+      Trio is an open-source automated insulin delivery system.
+
+      !!! important "Important"
+          Trio has not undergone evaluation by any regulatory agency and is for use at your own risk.
+
+      ## History
+  draft:
+    edits:
+      - doc_path: docs/help/faq.md
+        operation: replace
+        anchor: |-
+          !!! important "Important"
+              Trio has not undergone evaluation by any regulatory agency and is for use at your own risk.
+        claims: [*smb_claim]
+  expect:
+    edit_constraints:
+      accepted: false
+      problems_include: [warning-changed]
+
+- id: pe-h5-uncited-claim-stops-at-layer-7
+  hazard: H5
+  summary: >-
+    A draft that layer 5 rejects (an uncited claim) must not get through layer 7 either, even
+    though its edit is otherwise harmless.
+  pr: *smb_pr
+  pages: *smb_page
+  draft:
+    edits:
+      - doc_path: docs/configuration/settings/smb.md
+        operation: replace
+        anchor: The SMB toggle is on the SMB settings screen.
+        claims:
+          - text: SMBs are now safe to use with any CGM.
+  expect:
+    edit_constraints:
+      accepted: false
+      problems_include: [citation-check-failed]

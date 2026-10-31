@@ -21,6 +21,7 @@ import yaml
 from open_docs_drafter.drafts import Draft, parse_draft
 from open_docs_drafter.facts import FactSet, Kind, inconsistencies
 from open_docs_drafter.layers.citation_check import check_draft
+from open_docs_drafter.layers.edit_constraints import check_edits
 from open_docs_drafter.layers.fact_extraction import extract_facts, fact_changes
 from open_docs_drafter.layers.input_check import check_input
 from open_docs_drafter.layers.triage import rule_based_tier
@@ -40,12 +41,14 @@ _CASE_KEYS = {
     "snapshot",
     "base_snapshot",
     "draft",
+    "pages",
     "expect",
 }
 _PR_KEYS = {"title", "body", "files"}
 _FILE_KEYS = {"path", "patch"}
-_EXPECT_KEYS = {"triage", "input_check", "facts", "citation_check", "pending"}
+_EXPECT_KEYS = {"triage", "input_check", "facts", "citation_check", "edit_constraints", "pending"}
 _CITATION_KEYS = {"accepted", "problems_include", "rendered"}
+_EDIT_KEYS = {"accepted", "problems_include", "page_contains"}
 _FACTS_KEYS = {"inconsistent", "consistent", "needs_human", "values", "changes"}
 _CHANGE_KEYS = {"setting", "kind", "old", "new"}
 _TRIAGE_KEYS = {"min_tier"}
@@ -63,6 +66,7 @@ class Case:
     snapshot: dict[str, str] | None  # Whole files (path -> text) for fact extraction.
     base_snapshot: dict[str, str] | None  # The same files before the change.
     draft: Draft | None  # A draft as layer 4 would produce it.
+    pages: dict[str, str] | None  # Current docs pages (path -> text) for layer 7.
     expect: dict[str, Any]
     source: str
 
@@ -147,6 +151,15 @@ def load_cases() -> list[Case]:
                     raise ValueError(f"{where}: an accepted draft can't expect problems")
                 if not cc["accepted"] and not cc.get("problems_include"):
                     raise ValueError(f"{where}: say which problems must reject the draft")
+            if "edit_constraints" in expect:
+                ec = expect["edit_constraints"]
+                _keys(ec, _EDIT_KEYS, f"{where} edit_constraints", {"accepted"})
+                if draft is None or pr is None or "pages" not in raw:
+                    raise ValueError(f"{where}: edit_constraints needs `draft`, `pr` and `pages`")
+                if ec["accepted"] and ec.get("problems_include"):
+                    raise ValueError(f"{where}: an accepted draft can't expect problems")
+                if not ec["accepted"] and not ec.get("problems_include"):
+                    raise ValueError(f"{where}: say which problems must reject the draft")
             if ("triage" in expect or "input_check" in expect) and pr is None:
                 raise ValueError(f"{where}: triage and input_check checks need a `pr`")
             if "facts" in expect:
@@ -177,6 +190,7 @@ def load_cases() -> list[Case]:
                     snapshot=raw.get("snapshot"),
                     base_snapshot=raw.get("base_snapshot"),
                     draft=draft,
+                    pages=raw.get("pages"),
                     expect=expect,
                     source=path.name,
                 )
@@ -283,6 +297,23 @@ def test_citation_check(case: Case) -> None:
         assert code in found, f"{case.id}: expected {code!r}, got {sorted(found)}"
     if "rendered" in want:
         assert [c.rendered for c in result.claims] == want["rendered"], case.id
+
+
+@pytest.mark.parametrize("case", _ids("edit_constraints"))
+def test_edit_constraints(case: Case) -> None:
+    assert case.draft is not None and case.pr is not None and case.pages is not None
+    want = case.expect["edit_constraints"]
+    profile = profile_for(case)
+    facts = extract_facts(profile, case.snapshot) if case.snapshot else FactSet([])
+    citations = check_draft(case.draft, case.pr, facts)
+    result = check_edits(profile, case.draft, citations, case.pages)
+    found = {p.code for p in result.problems}
+    details = "; ".join(p.detail for p in result.problems)
+    assert result.accepted is want["accepted"], f"{case.id}: problems: {details or 'none'}"
+    for code in want.get("problems_include", []):
+        assert code in found, f"{case.id}: expected {code!r}, got {sorted(found)}"
+    for path, text in want.get("page_contains", {}).items():
+        assert text in result.new_pages.get(path, ""), f"{case.id}: {path} lacks {text!r}"
 
 
 # ------------------------------------------------------------------ layers not built yet

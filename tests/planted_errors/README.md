@@ -52,10 +52,14 @@ uv run pytest tests/planted_errors -rs
 | `citation_check.accepted` | Layer 5 accepts (or rejects) the case's `draft` |
 | `citation_check.problems_include` | Layer 5 reports these problem codes |
 | `citation_check.rendered` | The claims' text after placeholders are filled from facts |
+| `edit_constraints.accepted` | Layer 7 accepts (or rejects) the `draft` applied to `pages` |
+| `edit_constraints.problems_include` | Layer 7 reports these problem codes |
+| `edit_constraints.page_contains` | Text the edited page must contain afterwards |
 | `pending` | A check for a layer not built yet; shown as a skipped test |
 
-Fact cases use `snapshot` (whole files, path to text) instead of `pr`. Citation cases add a
-`draft` in the format of [`drafts.py`](../../src/open_docs_drafter/drafts.py).
+Fact cases use `snapshot` (whole files, path to text) instead of `pr`. Citation and edit cases add a
+`draft` in the format of [`drafts.py`](../../src/open_docs_drafter/drafts.py); edit cases also give the current
+docs `pages`.
 
 Case files are validated strictly. A misspelt key is an error, never a silent pass.
 
@@ -110,3 +114,19 @@ Layer 5 (citation and number check), checked the same way:
 | Refusing facts that need a human | 1 |
 | Units rendered from the fact | 1 |
 | `DecimalPickerSettings.swift` red rule | 1 |
+
+Layer 7 (edit constraints), checked the same way:
+
+| Safeguard removed | Cases failed |
+|---|---:|
+| Warning boxes must survive word for word | 5 |
+| `danger` boxes protected | 3 |
+| Rejecting structural Markdown in claims (comments, code fences) | 2 |
+| Finding nested boxes | 2 |
+| Nested boxes keep their parent line | 1 |
+| `important` boxes protected | 1 |
+| Claim-count limit | 1 |
+| Both guards against drafts layer 5 rejected | 1 |
+
+Removing only the first of those two guards fails nothing, because the second guard
+rejects the same drafts on its own.

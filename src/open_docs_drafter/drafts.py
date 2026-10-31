@@ -42,10 +42,18 @@ class Claim:
     citations: tuple[Citation, ...] = field(default=())
 
 
+class Operation(StrEnum):
+    INSERT_AFTER = "insert_after"
+    INSERT_BEFORE = "insert_before"
+    REPLACE = "replace"
+
+
 @dataclass(frozen=True)
 class DocEdit:
     doc_path: str  # File in the docs repository.
     claims: tuple[Claim, ...]
+    operation: Operation = Operation.INSERT_AFTER
+    anchor: str | None = None  # Exact whole lines in the page; required by layer 7.
 
 
 @dataclass(frozen=True)
@@ -67,7 +75,7 @@ def parse_draft(data: Any) -> Draft:
     edits = []
     for i, e in enumerate(_list(top.get("edits"), "draft.edits")):
         where = f"edits[{i}]"
-        raw = _mapping(e, {"doc_path", "claims"}, where)
+        raw = _mapping(e, {"doc_path", "claims", "operation", "anchor"}, where)
         claims = []
         for j, c in enumerate(_list(raw.get("claims"), f"{where}.claims")):
             cw = f"{where}.claims[{j}]"
@@ -77,7 +85,20 @@ def parse_draft(data: Any) -> Draft:
                 for k, x in enumerate(_list(rc.get("citations", []), f"{cw}.citations"))
             )
             claims.append(Claim(_str(rc.get("text"), f"{cw}.text"), citations))
-        edits.append(DocEdit(_str(raw.get("doc_path"), f"{where}.doc_path"), tuple(claims)))
+        operation = raw.get("operation", Operation.INSERT_AFTER.value)
+        if operation not in {o.value for o in Operation}:
+            raise DraftFormatError(
+                f"{where}.operation must be one of {[o.value for o in Operation]}"
+            )
+        anchor = _str(raw["anchor"], f"{where}.anchor") if "anchor" in raw else None
+        edits.append(
+            DocEdit(
+                _str(raw.get("doc_path"), f"{where}.doc_path"),
+                tuple(claims),
+                Operation(operation),
+                anchor,
+            )
+        )
     return Draft(tuple(edits))
 
 

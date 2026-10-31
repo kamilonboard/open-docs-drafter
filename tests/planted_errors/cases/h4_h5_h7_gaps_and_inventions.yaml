@@ -38,26 +38,6 @@
       - component: release digest
         check: Release digest lists every merged PR, drafted or not.
 
-- id: pe-h4-warning-box-removed
-  hazard: H4
-  summary: A docs draft deletes an existing warning admonition.
-  pr:
-    title: Update SMB docs
-    body: Tightens the wording.
-    files:
-      - path: Trio/Sources/Modules/SMBSettings/View/SMBSettingsRootView.swift
-        patch: |
-          @@ -10 +10 @@
-          -            Text("Enable SMB")
-          +            Text("Enable Super Micro Bolus")
-  expect:
-    triage: {min_tier: red}
-    pending:
-      - component: layer 7
-        check: >-
-          Edit constraints reject a docs edit that removes or softens an existing
-          `!!! warning` or `!!! danger` block.
-
 - id: pe-h5-invented-behaviour
   hazard: H5
   summary: >-

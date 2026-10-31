@@ -222,3 +222,12 @@ rules:
       - "*.md"
       - "DeveloperDocs/*"
       - "TrioTests/*"
+
+# Layer 7: which TrioDocs pages a draft may edit. TrioDocs is English-only; translation is
+# done on the live site by Google Translate, so there are no translated files to protect.
+# Size limits come from the core; a profile could only make them smaller.
+docs:
+  paths: ["docs/*.md"]
+  exclude:
+    - "docs/includes/*" # shared snippets included in many pages
+    - "docs/help/translate.md"
