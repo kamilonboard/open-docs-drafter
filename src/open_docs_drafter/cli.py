@@ -1,22 +1,28 @@
 """Command-line entry point."""
 
 import argparse
+import difflib
 import json
 import sys
 from pathlib import Path
 
-from open_docs_drafter import __version__, backtest
+from open_docs_drafter import __version__, backtest, pipeline
 from open_docs_drafter.facts import Fact, inconsistencies
 from open_docs_drafter.github import (
+    FileCache,
     GitHubClient,
     GitHubError,
     PullRequestCache,
     fetch_merged,
+    fetch_pull,
     find_token,
+    snapshot,
 )
 from open_docs_drafter.layers import fact_extraction
+from open_docs_drafter.layers.edit_constraints import page_allowed
 from open_docs_drafter.layers.triage import rule_based_tier
 from open_docs_drafter.profile import Profile, ProfileError, load_profile
+from open_docs_drafter.providers import PROVIDERS, ProviderError, make_provider
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -59,6 +65,24 @@ def main(argv: list[str] | None = None) -> int:
     fx.add_argument("--setting", action="append", default=[], help="only these settings")
     fx.add_argument("--format", choices=["text", "json"], default="text")
 
+    dr = sub.add_parser(
+        "draft",
+        help="Dry run: draft docs for one merged PR and run every check. Writes nothing to GitHub.",
+    )
+    dr.add_argument("--profile", required=True)
+    dr.add_argument("--pr", type=int, required=True, help="merged pull request number")
+    dr.add_argument("--repo", help="owner/name; defaults to the profile's code_repo")
+    dr.add_argument("--provider", default="claude", choices=sorted(PROVIDERS))
+    dr.add_argument("--model", help="model id (claude default: claude-opus-5-5)")
+    dr.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max"])
+    dr.add_argument(
+        "--no-fallbacks",
+        action="store_true",
+        help="pin the model exactly; a refusal becomes 'needs human' (hazard H10)",
+    )
+    dr.add_argument("--cache-dir", default=".cache")
+    dr.add_argument("--out", default="runs", help="where to write the audit record")
+
     args = parser.parse_args(argv)
 
     if args.command is None:
@@ -84,6 +108,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "facts":
         return _facts(args, profile)
+
+    if args.command == "draft":
+        return _draft(args, profile)
 
     result = rule_based_tier(profile, args.files, args.texts)
     print(f"Tier: {result.tier.name}")
@@ -203,6 +230,79 @@ def _facts(args: argparse.Namespace, profile: Profile) -> int:
         for c in changes:
             where = c.new.citation if c.new else (c.old.citation if c.old else "")
             print(f"  {c.summary}  [{where}]")
+    return 0
+
+
+def _draft(args: argparse.Namespace, profile: Profile) -> int:
+    repo = args.repo or profile.project.code_repo
+    cache_root = Path(args.cache_dir)
+    client = GitHubClient(find_token())
+    files_cache = FileCache(cache_root / "files")
+    options: dict[str, object] = {"model": args.model}
+    if args.provider == "claude":
+        options.update(effort=args.effort, fallbacks=not args.no_fallbacks)
+    try:
+        provider = make_provider(args.provider, **options)
+        pr = fetch_pull(client, PullRequestCache(cache_root / "backtest", repo), repo, args.pr)
+        head = pr.merge_commit_sha
+        parents = client.commit(repo, head)["parents"]
+        if not parents:
+            raise GitHubError(f"merge commit {head} has no parent")
+        base = parents[0]
+        print(f"{repo}#{pr.number}: {pr.title}")
+        print("  fetching code facts at the merge and before it ...", flush=True)
+
+        def wants_fact_file(path: str) -> bool:
+            return bool(fact_extraction.fact_paths(profile, [path]))
+
+        head_files = snapshot(client, files_cache, repo, head, wants_fact_file)
+        base_files = snapshot(client, files_cache, repo, base, wants_fact_file)
+        docs_repo = profile.project.docs_repo
+        docs_sha = client.commit(docs_repo, profile.project.docs_branch)["sha"]
+        print(f"  fetching {docs_repo}@{profile.project.docs_branch} pages ...", flush=True)
+        pages = snapshot(
+            client, files_cache, docs_repo, docs_sha, lambda p: page_allowed(profile, p)
+        )
+    except (GitHubError, ProviderError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"  drafting with {provider.name} ({provider.model}) ...", flush=True)
+    result = pipeline.run(
+        profile, pr, provider=provider, base_files=base_files, head_files=head_files, pages=pages
+    )
+    record = pipeline.audit_record(profile, pr, result)
+    record["refs"] = {"code_merge": head, "code_base": base, "docs": docs_sha}
+    audit_path = pipeline.write_audit(record, Path(args.out))
+
+    print(f"\nTier: {result.triage.tier.name}   Outcome: {result.outcome.value}")
+    print(f"  {result.summary}")
+    if result.input_check.findings:
+        for f in result.input_check.findings:
+            print(f"  layer 1 {f.severity}: {f.code}")
+    if result.drafting.evidence:
+        ev = result.drafting.evidence
+        print("  Evidence pack for a human expert:")
+        for c in ev.fact_changes:
+            print(f"    fact change: {c}")
+        for page in ev.candidate_pages:
+            print(f"    likely page: {page}")
+    if result.citations:
+        for claim_result in result.citations.claims:
+            for prob in claim_result.problems:
+                print(f"  layer 5 {prob.code}: {prob.detail}")
+    if result.edits:
+        for edit_problem in result.edits.problems:
+            print(f"  layer 7 {edit_problem.code}: {edit_problem.detail}")
+        for path, new_text in result.edits.new_pages.items():
+            diff = difflib.unified_diff(
+                pages[path].splitlines(keepends=True),
+                new_text.splitlines(keepends=True),
+                fromfile=f"a/{path}",
+                tofile=f"b/{path}",
+            )
+            print("".join(diff))
+    print(f"Audit record: {audit_path}")
     return 0
 
 

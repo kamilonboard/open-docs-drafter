@@ -1,6 +1,6 @@
 # open-docs-drafter
 
-**Status: early development.** All four plain-code safety layers are built: 1 (input check), 3 (fact extraction), 5 (citation and number check) and 7 (edit constraints), plus rule-based triage and the planted-error suite. Nothing drafts docs yet: the AI layers (4 and 6) come next.
+**Status: early development.** Layers 1–5 and 7 are built, plus rule-based triage and the planted-error suite. Drafting (layer 4) works as a dry run: it never writes to GitHub. The independent verifier (layer 6) is next.
 
 open-docs-drafter watches open-source automated insulin delivery (OS-AID) projects on GitHub and drafts documentation updates from merged code changes. It only opens **draft pull requests for human review**. It never merges anything.
 
@@ -53,9 +53,27 @@ These rules live in the core engine. A project profile can add rules but can nev
 - [x] Trio profile file with tier rules (draft, needs maintainer review)
 - [x] Deterministic layers (1, 3, 5, 7) with their own tests
 - [x] Planted-error test suite, built before any drafting code ([tests/planted_errors](tests/planted_errors); 3 checks pending later layers)
-- [ ] Drafting (layer 4) and independent verifier (layer 6)
+- [x] Drafting (layer 4), dry run only, with a swappable model provider
+- [ ] Independent verifier (layer 6)
 - [ ] Backtest on past Trio releases
 - [ ] Shadow mode, agreed with Trio maintainers
+
+## Try a dry run
+
+```sh
+uv sync --extra claude                 # the Claude provider is an optional install
+ant auth login                         # or export ANTHROPIC_API_KEY
+uv run open-docs-drafter draft --profile profiles/trio/profile.yaml --pr 1707
+```
+
+This drafts docs for one merged Trio PR, runs every check, prints the resulting docs diff
+and writes a full audit record to `runs/`. It never writes to GitHub. Use
+`--provider fake` to test the plumbing without calling a model, `--model` to choose
+another model, and `--no-fallbacks` to pin the model exactly.
+
+Model providers live in [`src/open_docs_drafter/providers`](src/open_docs_drafter/providers).
+Adding one (for example a local open model) means implementing one method,
+`complete_json(system, user, schema)`. Swapping providers never changes what the checks accept.
 
 ## Licence
 

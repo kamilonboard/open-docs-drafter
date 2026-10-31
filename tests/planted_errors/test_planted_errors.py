@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 import yaml
 
+from open_docs_drafter import pipeline
 from open_docs_drafter.drafts import Draft, parse_draft
 from open_docs_drafter.facts import FactSet, Kind, inconsistencies
 from open_docs_drafter.layers.citation_check import check_draft
@@ -27,6 +28,7 @@ from open_docs_drafter.layers.input_check import check_input
 from open_docs_drafter.layers.triage import rule_based_tier
 from open_docs_drafter.models import ChangedFile, PullRequest, changed_lines
 from open_docs_drafter.profile import Profile, load_profile
+from open_docs_drafter.providers import FakeProvider
 from open_docs_drafter.tiers import Tier
 
 HERE = Path(__file__).parent
@@ -314,6 +316,31 @@ def test_edit_constraints(case: Case) -> None:
         assert code in found, f"{case.id}: expected {code!r}, got {sorted(found)}"
     for path, text in want.get("page_contains", {}).items():
         assert text in result.new_pages.get(path, ""), f"{case.id}: {path} lacks {text!r}"
+
+
+def _red_cases() -> list[Any]:
+    return [
+        pytest.param(c, id=c.id)
+        for c in CASES
+        if c.pr is not None and c.expect.get("triage", {}).get("min_tier") == "red"
+    ]
+
+
+@pytest.mark.parametrize("case", _red_cases())
+def test_red_cases_never_reach_the_model(case: Case) -> None:
+    """Core rule 6: red-tier changes get no AI-written text. The model isn't even called."""
+    assert case.pr is not None
+    provider = FakeProvider({"decision": "draft", "reason": "should never be asked", "edits": []})
+    result = pipeline.run(
+        profile_for(case),
+        case.pr,
+        provider=provider,
+        base_files=case.base_snapshot or {},
+        head_files=case.snapshot or {},
+        pages=case.pages or {},
+    )
+    assert provider.calls == [], f"{case.id}: a red-tier change reached the model"
+    assert result.outcome is pipeline.Outcome.RED_EVIDENCE_PACK, case.id
 
 
 # ------------------------------------------------------------------ layers not built yet

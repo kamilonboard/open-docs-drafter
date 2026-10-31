@@ -118,15 +118,21 @@ def check_edits(
 # ------------------------------------------------------------------ checks
 
 
+def page_allowed(profile: Profile, path: str) -> bool:
+    """Whether the profile lets drafts edit this docs page (English source .md only)."""
+    docs = profile.docs
+    return (
+        path.endswith(".md")
+        and any(fnmatchcase(path, p) for p in docs.paths)
+        and not any(fnmatchcase(path, p) for p in docs.exclude)
+    )
+
+
 def _check_page(
     profile: Profile, edit: DocEdit, pages: Mapping[str, str], where: str
 ) -> list[Problem]:
-    docs = profile.docs
     path = edit.doc_path
-    allowed = any(fnmatchcase(path, p) for p in docs.paths) and not any(
-        fnmatchcase(path, p) for p in docs.exclude
-    )
-    if not allowed or not path.endswith(".md"):
+    if not page_allowed(profile, path):
         return [Problem("page-not-allowed", f"{where}: not an editable English source page")]
     if path not in pages:
         return [Problem("unknown-page", f"{where}: page doesn't exist; new pages need a human")]

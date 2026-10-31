@@ -18,6 +18,7 @@ class PullRequest:
     body: str
     merged_at: str
     files: tuple[ChangedFile, ...]
+    merge_commit_sha: str = ""  # The commit that merged it; empty if unknown
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)
@@ -30,6 +31,7 @@ class PullRequest:
             body=data.get("body") or "",
             merged_at=data["merged_at"],
             files=tuple(ChangedFile(f["path"], f.get("patch") or "") for f in data["files"]),
+            merge_commit_sha=data.get("merge_commit_sha") or "",
         )
 
 

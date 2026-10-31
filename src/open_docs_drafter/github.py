@@ -11,6 +11,7 @@ import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -93,6 +94,15 @@ class GitHubClient:
             raise GitHubError(f"{path}@{ref}: unexpected encoding {data.get('encoding')!r}")
         return base64.b64decode(data["content"]).decode("utf-8")
 
+    def commit(self, repo: str, ref: str) -> dict[str, Any]:
+        """A commit by sha, branch or tag: its sha and parents."""
+        data = self._get(f"/repos/{repo}/commits/{urllib.parse.quote(ref)}", {})
+        return {"sha": data["sha"], "parents": [p["sha"] for p in data.get("parents", [])]}
+
+    def pull(self, repo: str, number: int) -> dict[str, Any]:
+        result: dict[str, Any] = self._get(f"/repos/{repo}/pulls/{number}", {})
+        return result
+
     def pull_files(self, repo: str, number: int) -> tuple[ChangedFile, ...]:
         files: list[ChangedFile] = []
         for page in range(1, 31):
@@ -134,6 +144,68 @@ class PullRequestCache:
         return sorted(prs, key=lambda p: p.merged_at, reverse=True)
 
 
+class FileCache:
+    """File contents by repository, commit sha and path. A sha never changes, so entries
+    never go stale."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+
+    def _path(self, repo: str, sha: str, path: str) -> Path:
+        return self.root / repo.replace("/", "__") / sha / path
+
+    def get(self, repo: str, sha: str, path: str) -> str | None:
+        p = self._path(repo, sha, path)
+        return p.read_text(encoding="utf-8") if p.exists() else None
+
+    def put(self, repo: str, sha: str, path: str, text: str) -> None:
+        p = self._path(repo, sha, path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+
+
+def snapshot(
+    client: GitHubClient,
+    cache: FileCache,
+    repo: str,
+    sha: str,
+    wanted: Callable[[str], bool],
+) -> dict[str, str]:
+    """The text of every file at sha that `wanted` selects."""
+    files: dict[str, str] = {}
+    for path in client.tree(repo, sha):
+        if not wanted(path):
+            continue
+        text = cache.get(repo, sha, path)
+        if text is None:
+            text = client.file(repo, path, sha)
+            cache.put(repo, sha, path, text)
+        files[path] = text
+    return files
+
+
+def fetch_pull(
+    client: GitHubClient, cache: PullRequestCache, repo: str, number: int
+) -> PullRequest:
+    """One merged pull request with its files and merge commit."""
+    pr = cache.get(number)
+    if pr is not None and pr.merge_commit_sha:
+        return pr
+    data = client.pull(repo, number)
+    if not data.get("merged_at"):
+        raise GitHubError(f"{repo}#{number} is not merged")
+    pr = PullRequest(
+        number=number,
+        title=data["title"],
+        body=data.get("body") or "",
+        merged_at=data["merged_at"],
+        files=pr.files if pr is not None else client.pull_files(repo, number),
+        merge_commit_sha=data.get("merge_commit_sha") or "",
+    )
+    cache.put(pr)
+    return pr
+
+
 def fetch_merged(
     client: GitHubClient, cache: PullRequestCache, repo: str, limit: int, base: str | None = None
 ) -> list[PullRequest]:
@@ -148,6 +220,7 @@ def fetch_merged(
                 body=item.get("body") or "",
                 merged_at=item["merged_at"],
                 files=client.pull_files(repo, item["number"]),
+                merge_commit_sha=item.get("merge_commit_sha") or "",
             )
             cache.put(pr)
         result.append(pr)
