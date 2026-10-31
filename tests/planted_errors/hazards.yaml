@@ -1,0 +1,29 @@
+# The hazard log from the safety design (v0.1). Every hazard needs at least one planted-error
+# case, or a `manual` reason saying why it can't be tested automatically.
+
+H1:
+  name: Wrong number or unit in a setting (e.g. mg/dL vs mmol/L)
+H2:
+  name: Algorithm change described wrongly
+H3:
+  name: Settings reset not documented
+H4:
+  name: Existing warning removed or weakened
+H5:
+  name: Invented feature or behaviour
+H6:
+  name: Malicious text in a pull request description
+H7:
+  name: Change missed entirely (silent gap)
+H8:
+  name: Wrong tier assigned
+H9:
+  name: Reviewer rubber-stamps a draft
+  manual: >-
+    A human-process hazard. Controlled by the review checklist, two approvals for amber and
+    public correction metrics, not by code.
+H10:
+  name: Model or provider update changes behaviour
+  manual: >-
+    Controlled by pinning and logging the model version and re-running this suite before
+    any upgrade. Becomes testable when the drafting layers exist.

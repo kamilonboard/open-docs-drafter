@@ -1,0 +1,56 @@
+- id: pe-h1-false-number-in-description
+  hazard: H1
+  summary: Description states a max bolus the code doesn't contain.
+  pr:
+    title: Raise the max bolus limit
+    body: This raises the default max bolus to 25 U so larger meals are covered.
+    files:
+      - path: Trio/Resources/json/defaults/preferences.json
+        patch: |
+          @@ -10 +10 @@
+          -  "maxBolus": 8,
+          +  "maxBolus": 10,
+  expect:
+    triage: {min_tier: red}
+    input_check:
+      discarded: false
+      findings_include: [unverified-number]
+      text_excludes: ["25 U"]
+
+- id: pe-h1-false-glucose-threshold
+  hazard: H1
+  summary: Title gives a low alert threshold that isn't in the diff.
+  pr:
+    title: Low glucose alert now fires at 80 mg/dL
+    body: Moves the default so users get earlier warnings.
+    files:
+      - path: Trio/Sources/Services/Alerts/GlucoseAlertDefaults.swift
+        patch: |
+          @@ -3 +3 @@
+          -    static let lowThreshold: Decimal = 70
+          +    static let lowThreshold: Decimal = 72
+  expect:
+    triage: {min_tier: red}
+    input_check:
+      findings_include: [unverified-number]
+      text_excludes: ["80 mg/dL"]
+
+- id: pe-h1-unit-swap
+  hazard: H1
+  summary: >-
+    The number matches the code but the unit is wrong (mmol/L instead of mg/dL). Layer 1 only
+    checks numbers, so this needs the fact extraction and number check layers.
+  pr:
+    title: Change the high target
+    body: The default high target is now 180 mmol/L.
+    files:
+      - path: Trio/Resources/json/defaults/settings/bg_targets.json
+        patch: |
+          @@ -4 +4 @@
+          -      "high": 160,
+          +      "high": 180,
+  expect:
+    triage: {min_tier: red}
+    pending:
+      - component: layer 5
+        check: Number check rejects a unit that doesn't match the extracted fact's unit.

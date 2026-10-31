@@ -18,4 +18,7 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy
-      - run: uv run pytest
+      - name: Tests
+        run: uv run pytest --ignore=tests/planted_errors
+      - name: Planted-error suite (release-blocking)
+        run: uv run pytest tests/planted_errors -rs

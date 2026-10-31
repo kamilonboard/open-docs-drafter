@@ -1,0 +1,64 @@
+- id: pe-h3-silent-defaults-change
+  hazard: H3
+  summary: Default preferences change under a formatting title, with no mention of it.
+  pr:
+    title: Tidy JSON formatting
+    body: Reformats the defaults file.
+    files:
+      - path: Trio/Resources/json/defaults/preferences.json
+        patch: |
+          @@ -2,3 +2,3 @@
+          -  "max_iob": 0,
+          +  "max_iob": 2,
+  expect:
+    triage: {min_tier: red}
+
+- id: pe-h3-reset-call-in-unmapped-file
+  hazard: H3
+  summary: >-
+    A new code path resets settings to defaults, in a file no path rule covers, and the
+    description doesn't say so. Caught by the core "reset settings" keyword.
+  pr:
+    title: Handle app update on launch
+    body: Small startup fix.
+    files:
+      - path: Trio/Sources/Application/AppUpdateHandler.swift
+        patch: |
+          @@ -8,0 +9,2 @@
+          +        if isFirstLaunchAfterUpdate {
+          +            settingsStore.resetSettingsToDefaults()
+  expect:
+    triage: {min_tier: red}
+
+- id: pe-h3-core-data-model-change
+  hazard: H3
+  summary: A new Core Data model version can migrate or reset stored data.
+  pr:
+    title: Store pump status
+    body: Adds a field.
+    files:
+      - path: Model/TrioCoreDataPersistentContainer.xcdatamodeld/TrioCoreDataPersistentContainer 2.xcdatamodel/contents
+        patch: |
+          @@ -0,0 +1 @@
+          +<attribute name="pumpStatus" optional="YES" attributeType="String"/>
+  expect:
+    triage: {min_tier: red}
+
+- id: pe-h3-release-notes-omit-reset
+  hazard: H3
+  summary: >-
+    The docs draft for a release that resets settings must flag the reset. Needs the drafting
+    and verification layers.
+  pr:
+    title: Migrate settings storage
+    body: Moves settings to a new store.
+    files:
+      - path: Trio/Sources/Services/SettingsManager/SettingsMigration.swift
+        patch: |
+          @@ -0,0 +1 @@
+          +// Existing settings are reset to defaults during migration.
+  expect:
+    triage: {min_tier: red}
+    pending:
+      - component: layer 6
+        check: Verifier flags a release draft that omits a settings reset present in the diff.

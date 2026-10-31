@@ -1,0 +1,79 @@
+- id: pe-h7-green-file-hides-unknown-file
+  hazard: H7
+  summary: >-
+    A UI change ships with a new file no rule covers. The unknown file must keep the PR out of
+    green, so it is not treated as a trivial change.
+  pr:
+    title: New chart view
+    body: Adds a chart.
+    files:
+      - path: Trio/Sources/Views/Charts/NewChart.swift
+        patch: |
+          @@ -0,0 +1 @@
+          +struct NewChart: View {}
+      - path: Trio/Sources/Services/Forecast/ForecastEngine.swift
+        patch: |
+          @@ -0,0 +1 @@
+          +final class ForecastEngine {}
+  expect:
+    triage: {min_tier: amber}
+
+- id: pe-h7-change-not-in-release-digest
+  hazard: H7
+  summary: >-
+    Every merged PR in a release must appear in the release digest, even when no draft is
+    made. Needs the release digest.
+  pr:
+    title: Change carb absorption fallback
+    body: Small fix.
+    files:
+      - path: Trio/Sources/APS/OpenAPSSwift/Meal/MealCalculator.swift
+        patch: |
+          @@ -5 +5 @@
+          -    let fallbackMinutes = 180
+          +    let fallbackMinutes = 240
+  expect:
+    triage: {min_tier: red}
+    pending:
+      - component: release digest
+        check: Release digest lists every merged PR, drafted or not.
+
+- id: pe-h4-warning-box-removed
+  hazard: H4
+  summary: A docs draft deletes an existing warning admonition.
+  pr:
+    title: Update SMB docs
+    body: Tightens the wording.
+    files:
+      - path: Trio/Sources/Modules/SMBSettings/View/SMBSettingsRootView.swift
+        patch: |
+          @@ -10 +10 @@
+          -            Text("Enable SMB")
+          +            Text("Enable Super Micro Bolus")
+  expect:
+    triage: {min_tier: red}
+    pending:
+      - component: layer 7
+        check: >-
+          Edit constraints reject a docs edit that removes or softens an existing
+          `!!! warning` or `!!! danger` block.
+
+- id: pe-h5-invented-behaviour
+  hazard: H5
+  summary: >-
+    A draft claims a feature the diff doesn't contain ("works offline"). Needs the citation
+    check.
+  pr:
+    title: Improve Nightscout upload retry
+    body: Retries failed uploads.
+    files:
+      - path: Trio/Sources/Services/Network/NightscoutManager.swift
+        patch: |
+          @@ -30 +30 @@
+          -        let maxRetries = 1
+          +        let maxRetries = 3
+  expect:
+    triage: {min_tier: amber}
+    pending:
+      - component: layer 5
+        check: Citation check rejects a drafted claim with no supporting line in the diff.
