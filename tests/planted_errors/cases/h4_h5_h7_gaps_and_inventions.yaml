@@ -22,7 +22,7 @@
   hazard: H7
   summary: >-
     Every merged PR in a release must appear in the release digest, even when no draft is
-    made. Needs the release digest.
+    made.
   pr:
     title: Change carb absorption fallback
     body: Small fix.
@@ -34,9 +34,7 @@
           +    let fallbackMinutes = 240
   expect:
     triage: {min_tier: red}
-    pending:
-      - component: release digest
-        check: Release digest lists every merged PR, drafted or not.
+    digest: {min_tier: red, needs_attention: true}
 
 - id: pe-h5-invented-behaviour
   hazard: H5

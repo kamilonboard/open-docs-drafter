@@ -15,7 +15,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from open_docs_drafter.models import ChangedFile, PullRequest
+from open_docs_drafter.models import ChangedFile, DirectCommit, PullRequest
 
 API = "https://api.github.com"
 
@@ -98,6 +98,32 @@ class GitHubClient:
         """A commit by sha, branch or tag: its sha and parents."""
         data = self._get(f"/repos/{repo}/commits/{urllib.parse.quote(ref)}", {})
         return {"sha": data["sha"], "parents": [p["sha"] for p in data.get("parents", [])]}
+
+    def compare(self, repo: str, base: str, head: str) -> list[dict[str, Any]]:
+        """Every commit in base...head. Raises rather than return a partial list, because a
+        missing commit would be a silent gap in the release digest (hazard H7)."""
+        path = f"/repos/{repo}/compare/{urllib.parse.quote(f'{base}...{head}')}"
+        commits: list[dict[str, Any]] = []
+        total = None
+        page = 1
+        while True:
+            data = self._get(path, {"per_page": 100, "page": page})
+            total = data["total_commits"] if total is None else total
+            batch = data["commits"]
+            commits.extend(batch)
+            if len(batch) < 100:
+                break
+            page += 1
+        if len(commits) != total:
+            raise GitHubError(f"{base}...{head} returned {len(commits)} of {total} commits")
+        return commits
+
+    def commit_pulls(self, repo: str, sha: str) -> list[dict[str, Any]]:
+        """The pull requests that contain a commit."""
+        result: list[dict[str, Any]] = self._get(
+            f"/repos/{repo}/commits/{sha}/pulls", {"per_page": 100}
+        )
+        return result
 
     def pull(self, repo: str, number: int) -> dict[str, Any]:
         result: dict[str, Any] = self._get(f"/repos/{repo}/pulls/{number}", {})
@@ -225,3 +251,18 @@ def fetch_merged(
             cache.put(pr)
         result.append(pr)
     return result
+
+
+def fetch_range(
+    client: GitHubClient, cache: PullRequestCache, repo: str, base: str, head: str
+) -> tuple[tuple[PullRequest, ...], tuple[DirectCommit, ...]]:
+    """Every merged pull request in base...head, plus commits that came through none."""
+    numbers: list[int] = []
+    direct: list[DirectCommit] = []
+    for commit in client.compare(repo, base, head):
+        merged = [p["number"] for p in client.commit_pulls(repo, commit["sha"]) if p["merged_at"]]
+        if not merged:
+            subject = commit["commit"]["message"].split("\n", 1)[0]
+            direct.append(DirectCommit(commit["sha"], subject))
+        numbers.extend(n for n in merged if n not in numbers)
+    return tuple(fetch_pull(client, cache, repo, n) for n in numbers), tuple(direct)

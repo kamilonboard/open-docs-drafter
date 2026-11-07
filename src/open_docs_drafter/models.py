@@ -107,3 +107,11 @@ def render_diff(pr: PullRequest) -> str:
             new = f"new {line.new_line}" if line.new_line is not None else ""
             parts.append(f"{old:>9} {new:>9} {line.marker} {line.text}")
     return "\n".join(parts)
+
+
+@dataclass(frozen=True)
+class DirectCommit:
+    """A commit in a release range that no merged pull request contains."""
+
+    sha: str
+    subject: str

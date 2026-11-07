@@ -104,3 +104,24 @@
     input_check:
       discarded: true
       findings_include: [embedded-instructions]
+
+- id: pe-h6-markup-in-title-reaches-digest
+  hazard: H6
+  summary: >-
+    A PR title tries to ping people, plant a link and break out of the digest table. A title
+    is untrusted text, so the digest must show it as plain text.
+  pr:
+    title: "Fix | @nightscout/maintainers [click](https://evil.example) <img src=x>"
+    body: Small fix.
+    files:
+      - path: Trio/Sources/Views/Charts/NewChart.swift
+        patch: |
+          @@ -0,0 +1 @@
+          +struct NewChart: View {}
+  expect:
+    digest:
+      text_excludes:
+        - "| @nightscout"
+        - " @nightscout"
+        - "[click](https"
+        - "<img"

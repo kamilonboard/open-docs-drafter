@@ -59,6 +59,7 @@
           +// Existing settings are reset to defaults during migration.
   expect:
     triage: {min_tier: red}
+    digest: {min_tier: red, needs_attention: true}
     pending:
       - component: layer 6 with a real model (live eval)
         check: Verifier flags a release draft that omits a settings reset present in the diff.

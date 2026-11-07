@@ -18,7 +18,7 @@ from typing import Any
 import pytest
 import yaml
 
-from open_docs_drafter import pipeline
+from open_docs_drafter import digest, pipeline
 from open_docs_drafter.drafts import Draft, parse_draft
 from open_docs_drafter.facts import FactSet, Kind, inconsistencies
 from open_docs_drafter.layers.citation_check import check_draft
@@ -48,7 +48,15 @@ _CASE_KEYS = {
 }
 _PR_KEYS = {"title", "body", "files"}
 _FILE_KEYS = {"path", "patch"}
-_EXPECT_KEYS = {"triage", "input_check", "facts", "citation_check", "edit_constraints", "pending"}
+_EXPECT_KEYS = {
+    "triage",
+    "input_check",
+    "facts",
+    "citation_check",
+    "edit_constraints",
+    "digest",
+    "pending",
+}
 _CITATION_KEYS = {"accepted", "problems_include", "rendered"}
 _EDIT_KEYS = {"accepted", "problems_include", "page_contains"}
 _FACTS_KEYS = {"inconsistent", "consistent", "needs_human", "values", "changes"}
@@ -56,6 +64,7 @@ _CHANGE_KEYS = {"setting", "kind", "old", "new"}
 _TRIAGE_KEYS = {"min_tier"}
 _INPUT_KEYS = {"discarded", "findings_include", "text_excludes", "diff_tier_min"}
 _PENDING_KEYS = {"component", "check"}
+_DIGEST_KEYS = {"min_tier", "needs_attention", "text_excludes"}
 
 
 @dataclass(frozen=True)
@@ -341,6 +350,33 @@ def test_red_cases_never_reach_the_model(case: Case) -> None:
     )
     assert provider.calls == [], f"{case.id}: a red-tier change reached the model"
     assert result.outcome is pipeline.Outcome.RED_EVIDENCE_PACK, case.id
+
+
+# ------------------------------------------------------------------ release digest
+
+
+def _digest_cases() -> list[Any]:
+    return [pytest.param(c, id=c.id) for c in CASES if "digest" in c.expect]
+
+
+@pytest.mark.parametrize("case", _digest_cases())
+def test_digest(case: Case) -> None:
+    assert case.pr is not None, case.id
+    expect = case.expect["digest"]
+    _keys(expect, _DIGEST_KEYS, f"{case.id} digest")
+    profile = load_profile(PROFILES[case.profile])
+    # This PR got no draft, and it must be listed anyway.
+    result = digest.build(profile, "v1", "v2", [case.pr], (), {})
+    entry = next(e for e in result.entries if e.pr.number == case.pr.number)
+    assert entry.status == digest.NOT_DRAFTED, case.id
+    if "min_tier" in expect:
+        assert entry.triage.tier >= _tier(expect["min_tier"], case.id), case.id
+    if "needs_attention" in expect:
+        assert entry.needs_attention is expect["needs_attention"], case.id
+    text = digest.format_markdown(result)
+    assert f"#{case.pr.number}" in text, case.id
+    for banned in expect.get("text_excludes", []):
+        assert banned not in text, f"{case.id}: {banned!r} reached the digest unescaped"
 
 
 # ------------------------------------------------------------------ layers not built yet

@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from open_docs_drafter import __version__, backtest, pipeline
+from open_docs_drafter import __version__, backtest, digest, pipeline
 from open_docs_drafter.facts import Fact, inconsistencies
 from open_docs_drafter.github import (
     FileCache,
@@ -15,6 +15,7 @@ from open_docs_drafter.github import (
     PullRequestCache,
     fetch_merged,
     fetch_pull,
+    fetch_range,
     find_token,
     snapshot,
 )
@@ -54,6 +55,16 @@ def main(argv: list[str] | None = None) -> int:
     bt.add_argument("--cache-dir", default=".cache/backtest")
     bt.add_argument("--offline", action="store_true", help="use cached PRs only")
     bt.add_argument("--format", choices=["text", "markdown", "json"], default="text")
+
+    dg = sub.add_parser(
+        "digest", help="List every merged change between two releases, drafted or not."
+    )
+    dg.add_argument("--profile", required=True)
+    dg.add_argument("--repo", help="owner/name; defaults to the profile's code_repo")
+    dg.add_argument("--base", required=True, metavar="REF", help="the previous release")
+    dg.add_argument("--head", required=True, metavar="REF", help="the new release")
+    dg.add_argument("--cache-dir", default=".cache")
+    dg.add_argument("--runs", default="runs", help="audit records to read draft outcomes from")
 
     fx = sub.add_parser(
         "facts", help="Extract exact, cited setting facts from the code at a git ref."
@@ -110,6 +121,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "backtest":
         return _backtest(args, profile)
 
+    if args.command == "digest":
+        return _digest(args, profile)
+
     if args.command == "facts":
         return _facts(args, profile)
 
@@ -159,6 +173,21 @@ def _backtest(args: argparse.Namespace, profile: Profile) -> int:
         "json": backtest.format_json,
     }[args.format]
     print(formatter(results, changes))
+    return 0
+
+
+def _digest(args: argparse.Namespace, profile: Profile) -> int:
+    repo = args.repo or profile.project.code_repo
+    cache = PullRequestCache(Path(args.cache_dir) / "backtest", repo)
+    try:
+        prs, direct = fetch_range(GitHubClient(find_token()), cache, repo, args.base, args.head)
+        outcomes = digest.outcomes_from_audit(Path(args.runs))
+    except (GitHubError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(
+        digest.format_markdown(digest.build(profile, args.base, args.head, prs, direct, outcomes))
+    )
     return 0
 
 
