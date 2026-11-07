@@ -30,3 +30,10 @@ audit-logs/
 
 # Backtest cache
 .cache/
+
+# Live eval output (per-call traces and local approval state stay local)
+.claude/hillclimb/**/traces/
+.claude/hillclimb/**/_state.json
+.claude/hillclimb/**/report.html
+.claude/hillclimb/**/trajectory/
+.claude/hillclimb/**/_checks/

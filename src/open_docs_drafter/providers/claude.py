@@ -31,12 +31,14 @@ class ClaudeProvider:
         effort: str = "high",
         fallbacks: bool = True,
         max_tokens: int = 16000,
+        timeout: float | None = None,
         client: Any = None,
     ) -> None:
         self.model = model
         self.effort = effort
         self.fallbacks = fallbacks
         self.max_tokens = max_tokens
+        self.timeout = timeout  # Seconds per request; the SDK default is 10 minutes
         self._client = client
 
     def _get_client(self) -> Any:
@@ -48,7 +50,9 @@ class ClaudeProvider:
                     "The Claude provider needs the Anthropic SDK: "
                     "pip install 'open-docs-drafter[claude]'"
                 ) from exc
-            self._client = anthropic.Anthropic()
+            self._client = (
+                anthropic.Anthropic(timeout=self.timeout) if self.timeout else anthropic.Anthropic()
+            )
         return self._client
 
     def complete_json(self, system: str, user: str, schema: dict[str, Any]) -> ProviderResponse:
